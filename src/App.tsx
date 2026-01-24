@@ -36,9 +36,6 @@ function App() {
   const [viewMode, setViewMode] = useState<'details' | 'add' | 'settings' | 'edit'>('details')
   const [showAuthModal, setShowAuthModal] = useState(false)
 
-  // Profile State
-  const [displayName, setDisplayName] = useState('')
-
   // Auth State
   const [user, setUser] = useState<any>(null)
 
@@ -51,12 +48,8 @@ function App() {
       })
     }
 
-    // Fetch Settings (DisplayName)
-    if (window.electronAPI) {
-      window.electronAPI.getSettings().then(settings => {
-        if (settings.displayName) setDisplayName(settings.displayName)
-      })
-    }
+    // Note: We don't need to fetch settings manually anymore,
+    // because main process sends them in app-state via sendStateUpdate()
 
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -93,21 +86,14 @@ function App() {
         setState(prev => ({ ...prev, ...newState }));
       })
 
-      // FORCE LOGOUT HANDLER (For when backend rejects invalid tokens)
+      // FORCE LOGOUT HANDLER
       window.ipcRenderer.on('auth:force-logout', async () => {
         console.warn('Backend requested force logout due to invalid session.')
 
-        // 1. Standard SignOut
         await supabase.auth.signOut()
-
-        // 2. Nuke LocalStorage (Supabase persistence)
-        localStorage.clear() // Simple and effective for this issue
-
-        // 3. Reset State
+        localStorage.clear()
         setUser(null)
-        setDisplayName('')
-
-        // 4. Reload to ensure clean slate (stops any pending retry loops)
+        // Resetting state happens via reload mostly, but let's clear local ref too if needed
         window.location.reload()
       })
     }
@@ -134,7 +120,6 @@ function App() {
 
   const handleLoginClick = () => {
     if (user) {
-      // Logic moved to explicit logout button usually, but keeping toggle for safety
       supabase.auth.signOut()
     } else {
       setShowAuthModal(true)
@@ -145,8 +130,6 @@ function App() {
     await supabase.auth.signOut()
     localStorage.clear()
     setUser(null)
-    setDisplayName('')
-    // Optional: reload to clean state
     window.location.reload()
   }
 
@@ -178,7 +161,7 @@ function App() {
         onLogout={handleLogout}
         onSettings={handleSettings}
         userEmail={user?.email}
-        displayName={displayName}
+        displayName={state.displayName} // USE STATE.DISPLAYNAME
         isOnline={state.isOnline}
         isConfigured={!!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY}
       />
