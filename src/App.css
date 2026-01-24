@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --bg-color: #2c2c2c;
+  --text-color: #ffffff;
+  --accent-color: #55aa55; /* Minecraft Green */
+  --inactive-color: #aa5555; /* Red */
+  --pixel-bg: #1a1a1a;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Press Start 2P', cursive;
+  overflow: hidden; /* No scrollbars for app */
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 2rem;
+  text-align: center;
+}
+
+.title {
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+  color: #ddd;
+  text-shadow: 4px 4px 0px #000;
+}
+
+.status-box {
+  padding: 1rem 2rem;
+  border: 4px solid #000;
+  background-color: var(--pixel-bg);
+  margin-bottom: 2rem;
+  box-shadow: 8px 8px 0px #000;
+  font-size: 1.2rem;
+}
+
+.status-box.active {
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.status-box.inactive {
+  color: var(--inactive-color);
+}
+
+.timer-section {
+  margin-bottom: 1.5rem;
+}
+
+.timer-section h2 {
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.8;
+}
+
+.timer {
+  background: var(--pixel-bg);
+  border: 4px solid #444;
+  padding: 10px;
+  box-shadow: 4px 4px 0px #000;
+}
+
+.big-text {
+  font-size: 2rem;
+  color: #fff;
+}
+
+.small-text {
+  font-size: 1.2rem;
+  color: #aaa;
+}
+
