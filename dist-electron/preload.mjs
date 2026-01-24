@@ -1,5 +1,9 @@
 "use strict";
 const electron = require("electron");
+electron.contextBridge.exposeInMainWorld("electronAPI", {
+  getSettings: () => electron.ipcRenderer.invoke("settings:get"),
+  setSettings: (settings) => electron.ipcRenderer.invoke("settings:set", settings)
+});
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
     const [channel, listener] = args;
@@ -17,6 +21,4 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
     const [channel, ...omit] = args;
     return electron.ipcRenderer.invoke(channel, ...omit);
   }
-  // You can expose other apts you need here.
-  // ...
 });

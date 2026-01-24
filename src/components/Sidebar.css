@@ -1,122 +1,174 @@
 .sidebar {
-    background-color: #2a2a2a;
     width: 250px;
+    background-color: #1e1e1e;
     display: flex;
     flex-direction: column;
-    border-right: 2px solid #000;
     height: 100vh;
+    border-right: 1px solid #333;
 }
 
 .sidebar-header {
     padding: 20px;
     font-size: 0.8rem;
-    color: #666;
-    letter-spacing: 2px;
-    border-bottom: 2px solid #1a1a1a;
-    background: #222;
+    font-weight: bold;
+    color: #888;
+    letter-spacing: 1px;
 }
 
 .game-list {
     flex: 1;
     overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
 }
 
 .game-item {
-    padding: 10px;
+    padding: 12px 20px;
     cursor: pointer;
-    border: 2px solid transparent;
-    /* Placeholder to prevent jump */
     display: flex;
     justify-content: space-between;
     align-items: center;
+    color: #ccc;
+    font-weight: 500;
 }
 
 .game-item:hover {
-    background-color: #333;
+    background-color: #2a2a2a;
+    color: white;
 }
 
 .game-item.selected {
-    background-color: #3e3e3e;
-    border: 2px solid #000;
-    border-left: 4px solid #5b6ee1;
-    /* Aseprite Blue */
-}
-
-.game-name {
-    font-size: 0.7rem;
-    color: #dcdcdc;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.game-item.selected .game-name {
-    color: #fff;
-    font-weight: bold;
+    background-color: #333;
+    color: white;
+    border-left: 3px solid #4caf50;
 }
 
 .running-indicator {
-    font-size: 0.5rem;
-    color: #4cd964;
-    font-family: monospace;
+    font-size: 0.6rem;
+    background-color: #4caf50;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.sidebar-actions {
+    padding: 20px;
 }
 
 .add-game-btn {
-    padding: 15px;
-    background: #000;
-    color: #5b6ee1;
-    border: none;
-    border-top: 2px solid #000;
+    width: 100%;
+    background-color: transparent;
+    border: 1px dashed #555;
+    color: #888;
+    padding: 10px;
     cursor: pointer;
-    font-family: inherit;
-    font-size: 0.7rem;
+    border-radius: 4px;
     transition: all 0.2s;
 }
 
 .add-game-btn:hover {
-    background: #111;
-    color: #fff;
+    border-color: #888;
+    color: white;
+    background-color: #252525;
 }
 
 .sidebar-footer {
     padding: 20px;
+    background-color: #1a1a1a;
     border-top: 1px solid #333;
-    background: #222;
 }
 
 .login-btn {
     width: 100%;
-    padding: 10px;
-    background-color: #5b6ee1;
+    background-color: #4caf50;
+    /* Green */
     color: white;
     border: none;
+    padding: 10px;
     border-radius: 4px;
     cursor: pointer;
     font-weight: bold;
-    font-size: 0.8rem;
-    transition: background-color 0.2s;
 }
 
 .login-btn:hover {
-    background-color: #4a5bd0;
+    background-color: #43a047;
 }
 
-.user-email {
-    font-size: 0.8rem;
-    color: #888;
-    cursor: pointer;
-    text-align: center;
+/* User Profile Styles */
+.user-profile {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.avatar {
+    width: 36px;
+    height: 36px;
+    background-color: #555;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.display-name {
+    color: white;
+    font-weight: 500;
+    font-size: 0.9rem;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 10px 0;
 }
 
-.user-email:hover {
-    color: #ff6b6b;
-    text-decoration: line-through;
+.user-status {
+    color: #4caf50;
+    font-size: 0.7rem;
+}
+
+.profile-controls {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    /* Right align buttons */
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-btn:hover {
+    background-color: #333;
+    color: white;
+}
+
+.logout-btn:hover {
+    color: #ef5350;
+    /* Red hover for logout */
+    background-color: #3e2020;
 }

@@ -28243,7 +28243,11 @@ const store = new ElectronStore({
       minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
       hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
     },
-    gameDefinitions: defaultGames
+    gameDefinitions: defaultGames,
+    settings: {
+      autoSync: true,
+      displayName: ""
+    }
   }
 });
 let GAMES = store.get("gameDefinitions") || defaultGames;
@@ -28259,6 +28263,7 @@ let tray = null;
 let isQuitting = false;
 let supabase = null;
 let currentUser = null;
+let isOnline = true;
 process.env.DIST = path$1.join(__dirname$1, "../dist");
 process.env.VITE_PUBLIC = app$1.isPackaged ? process.env.DIST : path$1.join(process.env.DIST, "../public");
 let win;
@@ -28332,15 +28337,30 @@ ipcMain$1.on("auth:session", async (_event, session) => {
   if (supabase && session) {
     console.log("[Auth] Received session for:", session.user.email);
     currentUser = session.user;
-    const { error } = await supabase.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token
-    });
-    if (error) {
-      console.error("[Auth] Failed to set session in Main:", error);
-    } else {
-      console.log("[Auth] Main process authenticated successfully");
-      await syncWithSupabase();
+    try {
+      const { error } = await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      });
+      if (error) {
+        if (error.message && (error.message.includes("fetch failed") || error.message.includes("ENOTFOUND"))) {
+          console.log("[Auth] Offline mode: Could not authenticate with Supabase.");
+          isOnline = false;
+        } else {
+          console.error("[Auth] Failed to set session in Main:", error);
+          isOnline = false;
+        }
+      } else {
+        console.log("[Auth] Main process authenticated successfully");
+        isOnline = true;
+        await syncWithSupabase();
+      }
+    } catch (e) {
+      if (e.cause && e.cause.code === "ENOTFOUND") {
+        console.log("[Auth] Offline mode: Network unavailable.");
+      } else {
+        console.error("[Auth] Unexpected error setting session:", e);
+      }
     }
   }
 });
@@ -28383,6 +28403,15 @@ ipcMain$1.on("add-game", (_event, { name, processName }) => {
   console.log(`[IPC] Game saved: ${name}`);
   sendStateUpdate();
 });
+ipcMain$1.handle("settings:get", () => {
+  return store.get("settings") || {};
+});
+ipcMain$1.handle("settings:set", (_event, newSettings) => {
+  const current = store.get("settings") || {};
+  const updated = { ...current, ...newSettings };
+  store.set("settings", updated);
+  console.log("[Settings] Updated:", updated);
+});
 async function checkProcess() {
   try {
     const { stdout } = await execAsync("tasklist /FO CSV /NH");
@@ -28417,8 +28446,11 @@ async function checkProcess() {
           };
           gameData.history.push(sessionEntry);
           store.set(`games.${activeGameId}`, gameData);
-          if (currentUser && supabase) {
+          const settings = store.get("settings") || { autoSync: true };
+          if (currentUser && supabase && settings.autoSync !== false) {
             syncWithSupabase();
+          } else if (currentUser && settings.autoSync === false) {
+            console.log("[Sync] Skipped (Auto-Sync Disabled)");
           }
           sessionStartTime = null;
           sessionPlaytime = 0;
@@ -28475,8 +28507,10 @@ async function syncWithSupabase() {
       const { data: remoteGame, error: fetchError } = await supabase.from("games").select("*").eq("user_id", currentUser.id).eq("identifier", gameId).single();
       if (fetchError && fetchError.code !== "PGRST116") {
         console.error(`[Sync] Failed to fetch ${gameId}:`, fetchError);
+        isOnline = false;
         continue;
       }
+      isOnline = true;
       let remoteTotal = remoteGame?.total_time || 0;
       const remoteLastSession = remoteGame?.last_session || 0;
       if (deltaSeconds > 0) {
@@ -28569,7 +28603,8 @@ function sendStateUpdate() {
       totalTime: gameData.totalPlaytime || 0,
       lastSession: gameData.lastSession || 0,
       history: (gameData.history || []).slice(-50).reverse(),
-      games: gamesList
+      games: gamesList,
+      isOnline
     });
   }
 }

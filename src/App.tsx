@@ -3,6 +3,7 @@ import './App.css'
 import { Sidebar } from './components/Sidebar'
 import { AddGameView } from './views/AddGameView'
 import { GameDetailsView } from './views/GameDetailsView'
+import SettingsView from './views/SettingsView'
 import { AuthModal } from './components/AuthModal'
 import { supabase } from './lib/supabase'
 import type { AppState } from './types'
@@ -16,6 +17,7 @@ function formatTime(seconds: number) {
 
 function App() {
   const [state, setState] = useState<AppState>({
+    isOnline: true,
     isPlaying: false,
     sessionTime: 0,
     totalTime: 0,
@@ -28,8 +30,11 @@ function App() {
 
   // UI State
   const [selectedGameId, setSelectedGameId] = useState<string>('minecraft')
-  const [viewMode, setViewMode] = useState<'details' | 'add'>('details')
+  const [viewMode, setViewMode] = useState<'details' | 'add' | 'settings'>('details')
   const [showAuthModal, setShowAuthModal] = useState(false)
+
+  // Profile State
+  const [displayName, setDisplayName] = useState('')
 
   // Auth State
   const [user, setUser] = useState<any>(null)
@@ -40,6 +45,13 @@ function App() {
       window.ipcRenderer.send('auth:init', {
         url: import.meta.env.VITE_SUPABASE_URL,
         key: import.meta.env.VITE_SUPABASE_ANON_KEY
+      })
+    }
+
+    // Fetch Settings (DisplayName)
+    if (window.electronAPI) {
+      window.electronAPI.getSettings().then(settings => {
+        if (settings.displayName) setDisplayName(settings.displayName)
       })
     }
 
@@ -95,12 +107,21 @@ function App() {
     setViewMode('add')
   }
 
+  const handleSettings = () => {
+    setViewMode('settings')
+  }
+
   const handleLoginClick = () => {
     if (user) {
+      // Logic moved to explicit logout button usually, but keeping toggle for safety
       supabase.auth.signOut()
     } else {
       setShowAuthModal(true)
     }
+  }
+
+  const handleLogout = () => {
+    supabase.auth.signOut()
   }
 
   return (
@@ -120,12 +141,18 @@ function App() {
         onSelectGame={handleSelectGame}
         onAddGame={handleAddGame}
         onLogin={handleLoginClick}
+        onLogout={handleLogout}
+        onSettings={handleSettings}
         userEmail={user?.email}
+        displayName={displayName}
+        isOnline={state.isOnline}
       />
 
       <main className="main-content">
         {viewMode === 'add' ? (
           <AddGameView games={state.games} />
+        ) : viewMode === 'settings' ? (
+          <SettingsView userEmail={user?.email} />
         ) : (
           selectedGameMeta ? (
             <GameDetailsView

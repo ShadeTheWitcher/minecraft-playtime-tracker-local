@@ -44,7 +44,11 @@ const store = new Store({
             minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
             hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
         },
-        gameDefinitions: defaultGames
+        gameDefinitions: defaultGames,
+        settings: {
+            autoSync: true,
+            displayName: ''
+        }
     }
 })
 
@@ -72,6 +76,7 @@ let isQuitting = false
 // Supabase State
 let supabase: SupabaseClient | null = null
 let currentUser: { id: string; email: string } | null = null
+let isOnline = true
 
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
@@ -157,17 +162,33 @@ ipcMain.on('auth:session', async (_event, session) => {
         currentUser = session.user
 
         // Authenticate the Main Process Client!
-        const { error } = await supabase.auth.setSession({
-            access_token: session.access_token,
-            refresh_token: session.refresh_token
-        })
+        try {
+            const { error } = await supabase.auth.setSession({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token
+            })
 
-        if (error) {
-            console.error('[Auth] Failed to set session in Main:', error)
-        } else {
-            console.log('[Auth] Main process authenticated successfully')
-            // Trigger sync now that we are authenticated
-            await syncWithSupabase()
+            if (error) {
+                // Suppress scary "fetch failed" logs if it's just offline
+                if (error.message && (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND'))) {
+                    console.log('[Auth] Offline mode: Could not authenticate with Supabase.')
+                    isOnline = false
+                } else {
+                    console.error('[Auth] Failed to set session in Main:', error)
+                    isOnline = false
+                }
+            } else {
+                console.log('[Auth] Main process authenticated successfully')
+                isOnline = true
+                // Trigger sync now that we are authenticated
+                await syncWithSupabase()
+            }
+        } catch (e: any) {
+            if (e.cause && e.cause.code === 'ENOTFOUND') {
+                console.log('[Auth] Offline mode: Network unavailable.')
+            } else {
+                console.error('[Auth] Unexpected error setting session:', e)
+            }
         }
     }
 })
@@ -227,6 +248,17 @@ ipcMain.on('add-game', (_event, { name, processName }: { name: string; processNa
     sendStateUpdate()
 })
 
+ipcMain.handle('settings:get', () => {
+    return store.get('settings') || {}
+})
+
+ipcMain.handle('settings:set', (_event, newSettings) => {
+    const current = store.get('settings') as any || {}
+    const updated = { ...current, ...newSettings }
+    store.set('settings', updated)
+    console.log('[Settings] Updated:', updated)
+})
+
 async function checkProcess() {
     try {
         const { stdout } = await execAsync('tasklist /FO CSV /NH')
@@ -276,9 +308,12 @@ async function checkProcess() {
 
                     store.set(`games.${activeGameId}`, gameData)
 
-                    // Attempt Sync
-                    if (currentUser && supabase) {
+                    // Attempt Sync (Check Auto-Sync Preference)
+                    const settings = store.get('settings') as any || { autoSync: true }
+                    if (currentUser && supabase && settings.autoSync !== false) {
                         syncWithSupabase()
+                    } else if (currentUser && settings.autoSync === false) {
+                        console.log('[Sync] Skipped (Auto-Sync Disabled)')
                     }
 
                     sessionStartTime = null
@@ -358,8 +393,12 @@ async function syncWithSupabase() {
 
             if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = Not found
                 console.error(`[Sync] Failed to fetch ${gameId}:`, fetchError)
+                isOnline = false // Mark offline on fetch error
                 continue
             }
+
+            // If we got here, network seems OK
+            isOnline = true
 
             let remoteTotal = remoteGame?.total_time || 0
             const remoteLastSession = remoteGame?.last_session || 0
@@ -494,7 +533,8 @@ function sendStateUpdate() {
             totalTime: gameData.totalPlaytime || 0,
             lastSession: gameData.lastSession || 0,
             history: (gameData.history || []).slice(-50).reverse(),
-            games: gamesList
+            games: gamesList,
+            isOnline: isOnline
         })
     }
 }

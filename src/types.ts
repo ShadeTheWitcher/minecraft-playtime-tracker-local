@@ -4,6 +4,7 @@ export interface HistoryItem {
 }
 
 export interface AppState {
+    isOnline: boolean
     isPlaying: boolean
     sessionTime: number
     totalTime: number
