@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-// import psList from 'ps-list' // Removed due to packaging issues
 import { exec } from 'child_process'
 import util from 'util'
 import Store from 'electron-store'
@@ -12,19 +11,43 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Defines
 const POLL_INTERVAL = 1000 // 1 second
-const MINECRAFT_PROCESS_NAMES = ['javaw.exe', 'java.exe', 'Minecraft.exe', 'bedrock_server.exe', 'MinecraftWindows.exe']
+
+// Disable GPU Acceleration for Windows to prevent black/gray screens
+app.disableHardwareAcceleration()
+
+interface GameConfig {
+    id: string;
+    name: string;
+    processNames: string[];
+}
+
+const GAMES: Record<string, GameConfig> = {
+    minecraft: {
+        id: 'minecraft',
+        name: 'Minecraft',
+        processNames: ['javaw.exe', 'java.exe', 'Minecraft.exe', 'bedrock_server.exe', 'MinecraftWindows.exe']
+    },
+    hytale: {
+        id: 'hytale',
+        name: 'Hytale',
+        processNames: ['Hytale.exe', 'HytaleClient.exe']
+    }
+}
 
 // Store setup
 const store = new Store({
     defaults: {
-        totalPlaytime: 0,
-        lastSession: 0,
-        history: []
+        activeGameId: 'minecraft',
+        games: {
+            minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+            hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
+        }
     }
 })
 
 // State
-let isMinecraftRunning = false
+let activeGameId = store.get('activeGameId') as string || 'minecraft'
+let isGameRunning = false
 let sessionStartTime: number | null = null
 let pollInterval: NodeJS.Timeout | null = null
 let sessionPlaytime = 0
@@ -43,11 +66,11 @@ function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
         },
-        width: 600,
-        height: 600, // Adjusted height for DevTools visibility
+        width: 800,
+        height: 700,
         autoHideMenuBar: true,
         backgroundColor: '#2c2c2c',
-        resizable: true, // Allow resizing for debugging
+        resizable: false,
     })
 
     win.webContents.on('did-finish-load', () => {
@@ -62,7 +85,6 @@ function createWindow() {
         win.loadFile(path.join(process.env.DIST as string, 'index.html'))
     }
 
-    // Minimize to tray behavior
     win.on('close', (event) => {
         if (!isQuitting) {
             event.preventDefault()
@@ -92,17 +114,32 @@ function createTray() {
     })
 }
 
+// IPC Handlers
+ipcMain.on('set-active-game', (_event, gameId: string) => {
+    if (GAMES[gameId]) {
+        if (activeGameId !== gameId) {
+            // Switch game
+            activeGameId = gameId
+            store.set('activeGameId', gameId)
+
+            // Reset current session tracking
+            isGameRunning = false
+            sessionStartTime = null
+            sessionPlaytime = 0
+
+            console.log(`Switched to game: ${gameId}`)
+            sendStateUpdate()
+        }
+    }
+})
+
 async function checkProcess() {
     try {
-        // Use tasklist command on Windows which is built-in
         const { stdout } = await execAsync('tasklist /FO CSV /NH')
-        // stdout contains "Process Name","PID",...
-        // Parse CSV-like output
         const processes = stdout.split('\r\n')
             .map((line: string) => {
                 const parts = line.split(',')
                 if (parts.length > 0) {
-                    // Remove quotes
                     return parts[0].replace(/^"|"$/g, '')
                 }
                 return ''
@@ -110,35 +147,42 @@ async function checkProcess() {
             .filter((p: string) => p)
 
         const uniqueNames = new Set(processes)
-        const found = MINECRAFT_PROCESS_NAMES.some(name => uniqueNames.has(name))
+        const currentGame = GAMES[activeGameId]
 
-        if (found && !isMinecraftRunning) {
+        // Safety check if game config exists
+        if (!currentGame) return
+
+        const found = currentGame.processNames.some(name => uniqueNames.has(name))
+
+        if (found && !isGameRunning) {
             // Game started
-            isMinecraftRunning = true
+            isGameRunning = true
             sessionStartTime = Date.now()
-            console.log('Minecraft started')
-        } else if (!found && isMinecraftRunning) {
+            console.log(`${currentGame.name} started`)
+        } else if (!found && isGameRunning) {
             // Game stopped
-            isMinecraftRunning = false
+            isGameRunning = false
             if (sessionStartTime) {
                 const duration = Date.now() - sessionStartTime
                 const seconds = Math.floor(duration / 1000)
 
-                const currentTotal = store.get('totalPlaytime') as number
-                store.set('totalPlaytime', currentTotal + seconds)
-                store.set('lastSession', seconds)
+                // Save data per game
+                const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
 
-                const history = store.get('history') as any[]
-                history.push({ date: new Date().toISOString(), duration: seconds })
-                store.set('history', history)
+                gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
+                gameData.lastSession = seconds
+                gameData.history = gameData.history || []
+                gameData.history.push({ date: new Date().toISOString(), duration: seconds })
+
+                store.set(`games.${activeGameId}`, gameData)
 
                 sessionStartTime = null
                 sessionPlaytime = 0
-                console.log(`Minecraft stopped. Session: ${seconds}s`)
+                console.log(`${currentGame.name} stopped. Session: ${seconds}s`)
             }
         }
 
-        if (isMinecraftRunning && sessionStartTime) {
+        if (isGameRunning && sessionStartTime) {
             sessionPlaytime = Math.floor((Date.now() - sessionStartTime) / 1000)
         }
 
@@ -151,19 +195,22 @@ async function checkProcess() {
 
 function sendStateUpdate() {
     if (win) {
+        const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+
         win.webContents.send('app-state', {
-            isPlaying: isMinecraftRunning,
+            activeGameId: activeGameId,
+            gameName: GAMES[activeGameId]?.name || 'Unknown',
+            isPlaying: isGameRunning,
             sessionTime: sessionPlaytime,
-            totalTime: store.get('totalPlaytime'),
-            lastSession: store.get('lastSession') || 0
+            totalTime: gameData.totalPlaytime || 0,
+            lastSession: gameData.lastSession || 0,
+            history: (gameData.history || []).slice(-50).reverse()
         })
     }
 }
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-        // Do not quit, as we have tray support
-        // app.quit() 
     }
 })
 
@@ -180,6 +227,6 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
-    isQuitting = true // Ensure close event allows quit
+    isQuitting = true
     if (pollInterval) clearInterval(pollInterval)
 })

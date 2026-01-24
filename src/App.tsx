@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
 import './App.css'
-
-interface AppState {
-  isPlaying: boolean
-  sessionTime: number
-  totalTime: number
-  lastSession: number
-}
+import { Navbar } from './components/Navbar'
+import { DashboardView } from './views/DashboardView'
+import { HistoryView } from './views/HistoryView'
+import { GameSelectorView } from './views/GameSelectorView'
+import type { AppState } from './types'
 
 function formatTime(seconds: number) {
   const h = Math.floor(seconds / 3600)
@@ -16,43 +14,74 @@ function formatTime(seconds: number) {
 }
 
 function App() {
-  const [state, setState] = useState<AppState>({ isPlaying: false, sessionTime: 0, totalTime: 0, lastSession: 0 })
+  const [state, setState] = useState<AppState>({
+    isPlaying: false,
+    sessionTime: 0,
+    totalTime: 0,
+    lastSession: 0,
+    history: [],
+    activeGameId: 'minecraft',
+    gameName: 'Minecraft'
+  })
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'games'>('dashboard')
 
   useEffect(() => {
-    // Listen for state updates from main process
-    window.ipcRenderer.on('app-state', (_event: any, newState: AppState) => {
-      setState(newState)
-    })
+    // Safety check for IPC
+    if (!window.ipcRenderer) {
+      console.warn('ipcRenderer Not Found - Running in Offline/Browser Mode');
+      // Do not return here, allow render to proceed in offline mode
+      // or set a flag to show an error message in the UI
+    }
 
-    // Request initial state (optional, if main sends it on load)
+    if (window.ipcRenderer) {
+      window.ipcRenderer.on('app-state', (_event: any, newState: AppState) => {
+        const safeState = {
+          isPlaying: newState.isPlaying || false,
+          sessionTime: newState.sessionTime || 0,
+          totalTime: newState.totalTime || 0,
+          lastSession: newState.lastSession || 0,
+          history: newState.history || [],
+          activeGameId: newState.activeGameId || 'minecraft',
+          gameName: newState.gameName || 'Minecraft'
+        }
+        setState(safeState)
+      })
+    }
+
     return () => {
-      // Cleanup
-      window.ipcRenderer.off('app-state', (_event: any, newState: AppState) => { setState(newState) })
+      if (window.ipcRenderer) {
+        window.ipcRenderer.off('app-state', (_event: any, newState: AppState) => { setState(newState) })
+      }
     }
   }, [])
 
+  const handleGameSelect = (gameId: string) => {
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('set-active-game', gameId)
+    }
+  }
+
+  // Pre-render check to ensure components don't crash on mounting
+  if (!state) return <div>Loading State...</div>
+
   return (
     <div className="container">
-      <h1 className="title">Minecraft Tracker</h1>
+      <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <div className={`status-box ${state.isPlaying ? 'active' : 'inactive'}`}>
-        {state.isPlaying ? 'PLAYING' : 'IDLE'}
-      </div>
+      {activeTab === 'dashboard' && (
+        <DashboardView state={state} formatTime={formatTime} />
+      )}
 
-      <div className="timer-section">
-        <h2>Session</h2>
-        <div className="timer big-text">{formatTime(state.sessionTime)}</div>
-      </div>
+      {activeTab === 'history' && (
+        <HistoryView history={state.history} formatTime={formatTime} />
+      )}
 
-      <div className="timer-section">
-        <h2>Last Session</h2>
-        <div className="timer small-text">{formatTime(state.lastSession)}</div>
-      </div>
-
-      <div className="timer-section">
-        <h2>Total</h2>
-        <div className="timer small-text">{formatTime(state.totalTime)}</div>
-      </div>
+      {activeTab === 'games' && (
+        <GameSelectorView
+          activeGameId={state.activeGameId}
+          onSelectGame={handleGameSelect}
+        />
+      )}
     </div>
   )
 }

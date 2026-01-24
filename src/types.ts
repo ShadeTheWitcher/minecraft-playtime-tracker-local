@@ -1,0 +1,14 @@
+export interface HistoryItem {
+    date: string;
+    duration: number;
+}
+
+export interface AppState {
+    isPlaying: boolean
+    sessionTime: number
+    totalTime: number
+    lastSession: number
+    history: HistoryItem[]
+    activeGameId: string
+    gameName: string
+}

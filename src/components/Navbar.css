@@ -1,0 +1,40 @@
+.navbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    width: 100%;
+    justify-content: center;
+}
+
+.nav-btn {
+    background: var(--card-bg);
+    border: none;
+    color: var(--secondary-text);
+    padding: 15px 20px;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 0.8rem;
+    cursor: pointer;
+    box-shadow:
+        -2px 0 0 0 #000,
+        2px 0 0 0 #000,
+        0 -2px 0 0 #000,
+        0 2px 0 0 #000;
+    margin: 2px;
+    transition: all 0.1s;
+}
+
+.nav-btn:hover {
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.nav-btn.active {
+    background: var(--accent-color);
+    color: var(--bg-color);
+    box-shadow:
+        -2px 0 0 0 var(--accent-color),
+        2px 0 0 0 var(--accent-color),
+        0 -2px 0 0 var(--accent-color),
+        0 2px 0 0 var(--accent-color),
+        0 0 0 2px #000;
+}

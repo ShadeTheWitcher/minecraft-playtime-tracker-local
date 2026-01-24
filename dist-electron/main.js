@@ -1,4 +1,4 @@
-import electron, { app as app$1, BrowserWindow, nativeImage, Tray, Menu } from "electron";
+import electron, { app as app$1, ipcMain as ipcMain$1, BrowserWindow, nativeImage, Tray, Menu } from "electron";
 import path$1 from "path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
@@ -16073,15 +16073,30 @@ class ElectronStore extends Conf {
 const execAsync = util$2.promisify(exec);
 const __dirname$1 = path$1.dirname(fileURLToPath(import.meta.url));
 const POLL_INTERVAL = 1e3;
-const MINECRAFT_PROCESS_NAMES = ["javaw.exe", "java.exe", "Minecraft.exe", "bedrock_server.exe", "MinecraftWindows.exe"];
+app$1.disableHardwareAcceleration();
+const GAMES = {
+  minecraft: {
+    id: "minecraft",
+    name: "Minecraft",
+    processNames: ["javaw.exe", "java.exe", "Minecraft.exe", "bedrock_server.exe", "MinecraftWindows.exe"]
+  },
+  hytale: {
+    id: "hytale",
+    name: "Hytale",
+    processNames: ["Hytale.exe", "HytaleClient.exe"]
+  }
+};
 const store = new ElectronStore({
   defaults: {
-    totalPlaytime: 0,
-    lastSession: 0,
-    history: []
+    activeGameId: "minecraft",
+    games: {
+      minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+      hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
+    }
   }
 });
-let isMinecraftRunning = false;
+let activeGameId = store.get("activeGameId") || "minecraft";
+let isGameRunning = false;
 let sessionStartTime = null;
 let pollInterval = null;
 let sessionPlaytime = 0;
@@ -16097,13 +16112,11 @@ function createWindow() {
     webPreferences: {
       preload: path$1.join(__dirname$1, "preload.mjs")
     },
-    width: 600,
-    height: 600,
-    // Adjusted height for DevTools visibility
+    width: 800,
+    height: 700,
     autoHideMenuBar: true,
     backgroundColor: "#2c2c2c",
-    resizable: true
-    // Allow resizing for debugging
+    resizable: false
   });
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
@@ -16142,6 +16155,19 @@ function createTray() {
     win?.show();
   });
 }
+ipcMain$1.on("set-active-game", (_event, gameId) => {
+  if (GAMES[gameId]) {
+    if (activeGameId !== gameId) {
+      activeGameId = gameId;
+      store.set("activeGameId", gameId);
+      isGameRunning = false;
+      sessionStartTime = null;
+      sessionPlaytime = 0;
+      console.log(`Switched to game: ${gameId}`);
+      sendStateUpdate();
+    }
+  }
+});
 async function checkProcess() {
   try {
     const { stdout } = await execAsync("tasklist /FO CSV /NH");
@@ -16153,28 +16179,30 @@ async function checkProcess() {
       return "";
     }).filter((p) => p);
     const uniqueNames = new Set(processes);
-    const found = MINECRAFT_PROCESS_NAMES.some((name) => uniqueNames.has(name));
-    if (found && !isMinecraftRunning) {
-      isMinecraftRunning = true;
+    const currentGame = GAMES[activeGameId];
+    if (!currentGame) return;
+    const found = currentGame.processNames.some((name) => uniqueNames.has(name));
+    if (found && !isGameRunning) {
+      isGameRunning = true;
       sessionStartTime = Date.now();
-      console.log("Minecraft started");
-    } else if (!found && isMinecraftRunning) {
-      isMinecraftRunning = false;
+      console.log(`${currentGame.name} started`);
+    } else if (!found && isGameRunning) {
+      isGameRunning = false;
       if (sessionStartTime) {
         const duration = Date.now() - sessionStartTime;
         const seconds = Math.floor(duration / 1e3);
-        const currentTotal = store.get("totalPlaytime");
-        store.set("totalPlaytime", currentTotal + seconds);
-        store.set("lastSession", seconds);
-        const history = store.get("history");
-        history.push({ date: (/* @__PURE__ */ new Date()).toISOString(), duration: seconds });
-        store.set("history", history);
+        const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
+        gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds;
+        gameData.lastSession = seconds;
+        gameData.history = gameData.history || [];
+        gameData.history.push({ date: (/* @__PURE__ */ new Date()).toISOString(), duration: seconds });
+        store.set(`games.${activeGameId}`, gameData);
         sessionStartTime = null;
         sessionPlaytime = 0;
-        console.log(`Minecraft stopped. Session: ${seconds}s`);
+        console.log(`${currentGame.name} stopped. Session: ${seconds}s`);
       }
     }
-    if (isMinecraftRunning && sessionStartTime) {
+    if (isGameRunning && sessionStartTime) {
       sessionPlaytime = Math.floor((Date.now() - sessionStartTime) / 1e3);
     }
     sendStateUpdate();
@@ -16184,11 +16212,15 @@ async function checkProcess() {
 }
 function sendStateUpdate() {
   if (win) {
+    const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
     win.webContents.send("app-state", {
-      isPlaying: isMinecraftRunning,
+      activeGameId,
+      gameName: GAMES[activeGameId]?.name || "Unknown",
+      isPlaying: isGameRunning,
       sessionTime: sessionPlaytime,
-      totalTime: store.get("totalPlaytime"),
-      lastSession: store.get("lastSession") || 0
+      totalTime: gameData.totalPlaytime || 0,
+      lastSession: gameData.lastSession || 0,
+      history: (gameData.history || []).slice(-50).reverse()
     });
   }
 }

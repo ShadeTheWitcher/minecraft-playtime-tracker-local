@@ -1,84 +1,126 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 :root {
-  --bg-color: #2c2c2c;
-  --text-color: #ffffff;
-  --accent-color: #55aa55; /* Minecraft Green */
-  --inactive-color: #aa5555; /* Red */
-  --pixel-bg: #1a1a1a;
+  --bg-color: #202020;
+  --card-bg: #333333;
+  --text-color: #dddddd;
+  --accent-color: #4cd964;
+  /* Brighter Green */
+  --inactive-color: #ff3b30;
+  /* Brighter Red */
+  --secondary-text: #999999;
+  --border-color: #000000;
 }
 
 body {
   margin: 0;
   display: flex;
-  place-items: center;
+  justify-content: center;
+  align-items: flex-start;
+  /* Start from top */
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Press Start 2P', cursive;
-  overflow: hidden; /* No scrollbars for app */
+  overflow: hidden;
+  padding-top: 2rem;
 }
 
 .container {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 2rem;
-  text-align: center;
+  width: 90%;
+  max-width: 500px;
+  gap: 1.5rem;
 }
 
 .title {
-  font-size: 1.5rem;
-  margin-bottom: 2rem;
-  color: #ddd;
-  text-shadow: 4px 4px 0px #000;
-}
-
-.status-box {
-  padding: 1rem 2rem;
-  border: 4px solid #000;
-  background-color: var(--pixel-bg);
-  margin-bottom: 2rem;
-  box-shadow: 8px 8px 0px #000;
   font-size: 1.2rem;
-}
-
-.status-box.active {
-  color: var(--accent-color);
-  border-color: var(--accent-color);
-}
-
-.status-box.inactive {
-  color: var(--inactive-color);
-}
-
-.timer-section {
-  margin-bottom: 1.5rem;
-}
-
-.timer-section h2 {
-  font-size: 0.8rem;
-  margin-bottom: 0.5rem;
-  opacity: 0.8;
-}
-
-.timer {
-  background: var(--pixel-bg);
-  border: 4px solid #444;
-  padding: 10px;
-  box-shadow: 4px 4px 0px #000;
-}
-
-.big-text {
-  font-size: 2rem;
   color: #fff;
+  text-align: center;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000;
 }
 
-.small-text {
+/* Pixel Art Card Style */
+.pixel-card {
+  background-color: var(--card-bg);
+  padding: 1.5rem;
+  position: relative;
+  box-shadow:
+    -4px 0 0 0 var(--border-color),
+    4px 0 0 0 var(--border-color),
+    0 -4px 0 0 var(--border-color),
+    0 4px 0 0 var(--border-color);
+  margin: 4px;
+  /* Space for box-shadow border */
+}
+
+/* Status Banner */
+.status-card {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.status-card.active {
+  color: var(--bg-color);
+  background-color: var(--accent-color);
+  box-shadow:
+    -4px 0 0 0 var(--accent-color),
+    4px 0 0 0 var(--accent-color),
+    0 -4px 0 0 var(--accent-color),
+    0 4px 0 0 var(--accent-color),
+    0 0 0 4px var(--border-color);
+  /* Double border effect */
+}
+
+.status-card.inactive {
+  color: var(--text-color);
+  background-color: var(--card-bg);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  /* Two columns */
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-item.full-width {
+  grid-column: span 2;
+  margin-bottom: 1rem;
+  border-bottom: 4px solid var(--bg-color);
+  padding-bottom: 1.5rem;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--secondary-text);
+  text-transform: uppercase;
+}
+
+.stat-value {
   font-size: 1.2rem;
-  color: #aaa;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
 }
 
+.stat-value.big {
+  font-size: 2.5rem;
+  color: var(--accent-color);
+}
