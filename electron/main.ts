@@ -297,4 +297,19 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
     isQuitting = true
     if (pollInterval) clearInterval(pollInterval)
+
+    // Save current session if running
+    if (isGameRunning && sessionStartTime) {
+        const duration = Date.now() - sessionStartTime
+        const seconds = Math.floor(duration / 1000)
+
+        const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+        gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
+        gameData.lastSession = seconds
+        gameData.history = gameData.history || []
+        gameData.history.push({ date: new Date().toISOString(), duration: seconds })
+
+        store.set(`games.${activeGameId}`, gameData)
+        console.log(`Saved final session for ${activeGameId}: ${seconds}s`)
+    }
 })

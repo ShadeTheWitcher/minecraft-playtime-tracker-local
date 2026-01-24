@@ -1,16 +1,15 @@
 import '../App.css'
 import { HistoryView } from './HistoryView'
+import type { HistoryItem } from '../types'
 
 interface GameDetailsProps {
     gameId: string;
     gameName: string;
     totalTime: number;
-    // Stats passed if this is the active game, otherwise we might fetch from store in future? 
-    // For now we rely on App passing accurate data via props.
     isRunning: boolean;
     sessionTime: number;
     lastSession: number;
-    history: any[]; // reuse HistoryItem type later
+    history: HistoryItem[];
     formatTime: (seconds: number) => string;
 }
 

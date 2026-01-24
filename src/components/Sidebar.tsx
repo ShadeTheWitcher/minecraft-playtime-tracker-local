@@ -2,13 +2,14 @@ import './Sidebar.css'
 
 interface SidebarProps {
     games: { id: string; name: string; totalTime: number }[];
-    activeGameId: string; // The game currently running/monitored by the backend
-    selectedGameId: string; // The game currently selected in the UI for viewing
+    activeGameId: string;
+    isPlaying: boolean;
+    selectedGameId: string;
     onSelectGame: (id: string) => void;
     onAddGame: () => void;
 }
 
-export function Sidebar({ games, activeGameId, selectedGameId, onSelectGame, onAddGame }: SidebarProps) {
+export function Sidebar({ games, activeGameId, isPlaying, selectedGameId, onSelectGame, onAddGame }: SidebarProps) {
     return (
         <aside className="sidebar">
             <div className="sidebar-header">
@@ -25,7 +26,7 @@ export function Sidebar({ games, activeGameId, selectedGameId, onSelectGame, onA
                         <div className="game-name">
                             {game.name}
                         </div>
-                        {activeGameId === game.id && <span className="running-indicator">RUNNING</span>}
+                        {activeGameId === game.id && isPlaying && <span className="running-indicator">RUNNING</span>}
                     </div>
                 ))}
             </div>

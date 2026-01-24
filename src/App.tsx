@@ -19,49 +19,37 @@ function App() {
     totalTime: 0,
     lastSession: 0,
     history: [],
-    activeGameId: 'minecraft', // The one physically passing time (backend)
+    activeGameId: 'minecraft',
     gameName: 'Minecraft',
     games: []
   })
 
-  // UI Selection State (Independent of what's running)
   const [selectedGameId, setSelectedGameId] = useState<string>('minecraft')
   const [viewMode, setViewMode] = useState<'details' | 'add'>('details')
 
   useEffect(() => {
-    // Safety check for IPC
-    if (!window.ipcRenderer) {
-      console.warn('ipcRenderer Not Found - Running in Offline/Browser Mode');
-    }
-
     if (window.ipcRenderer) {
       window.ipcRenderer.on('app-state', (_event: any, newState: AppState) => {
-        // If the backend says a game started, we might want to switch view to it?
-        // For now, let's keep view independent unless it's the first load
         setState(prev => ({ ...prev, ...newState }));
       })
     }
-
-    return () => {
-      // clean up
-    }
   }, [])
 
-  // Derive data for the SELECTED game
-  // Note: 'state' only holds the ACTIVE game's live stats (sessionTime).
-  // 'state.games' holds the summary (totalTime).
-  // History is currently only sent for the ACTIVE game. 
-  // TODO: We need to fetch history for the selected game if it's not active.
-  // For MVP: We will show live stats only if selected == active. 
-  // Static stats (Total Time) come from state.games.
-
+  // Find metadata for the selected game
   const selectedGameMeta = state.games.find(g => g.id === selectedGameId)
+
+  // Debug Log
+  useEffect(() => {
+    console.log('Selected Game Meta:', selectedGameMeta)
+    console.log('Full Games List:', state.games)
+  }, [selectedGameMeta, state.games])
+
+  // Check if the selected game is ALSO the one currently running
   const isSelectedGameRunning = state.isPlaying && state.activeGameId === selectedGameId
 
   const handleSelectGame = (id: string) => {
     setSelectedGameId(id)
     setViewMode('details')
-    // Optional: Request full history for this game from backend if needed
   }
 
   const handleAddGame = () => {
@@ -73,6 +61,7 @@ function App() {
       <Sidebar
         games={state.games}
         activeGameId={state.activeGameId}
+        isPlaying={state.isPlaying}
         selectedGameId={viewMode === 'add' ? '' : selectedGameId}
         onSelectGame={handleSelectGame}
         onAddGame={handleAddGame}
@@ -86,15 +75,17 @@ function App() {
             <GameDetailsView
               gameId={selectedGameMeta.id}
               gameName={selectedGameMeta.name}
-              totalTime={selectedGameMeta.totalTime}
+              totalTime={selectedGameMeta.totalTime} // From store (persistent)
               isRunning={isSelectedGameRunning}
-              sessionTime={isSelectedGameRunning ? state.sessionTime : 0}
-              lastSession={isSelectedGameRunning ? state.lastSession : 0} // Last session logic needs improvement for non-active games
-              history={isSelectedGameRunning ? state.history : []} // History needs improvement
+              sessionTime={isSelectedGameRunning ? state.sessionTime : 0} // Live session
+              lastSession={selectedGameMeta.lastSession || 0} // Stored last session
+              history={selectedGameMeta.history || []} // Stored history
               formatTime={formatTime}
             />
           ) : (
-            <div>Select a game</div>
+            <div style={{ padding: '20px', color: '#888' }}>
+              <h2>Select a game to view stats</h2>
+            </div>
           )
         )}
       </main>
