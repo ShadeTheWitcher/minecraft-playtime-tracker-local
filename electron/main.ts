@@ -752,11 +752,22 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
-    // Ensure the active user's bucket exists (especially after a reset)
+    // Ensure the active user's bucket exists
     setActiveUser(activeUserId)
 
     createWindow()
     createTray()
+
+    // Detect if app was started by the system (Startup)
+    const loginItemSettings = app.getLoginItemSettings()
+    const settings = getUserSettings()
+
+    // If opened at login AND the user has startup/tray enabled, hide the window
+    if (loginItemSettings.wasOpenedAtLogin && settings.runAtStartup) {
+        console.log('[Startup] App started by system. Hiding window...')
+        win?.hide()
+    }
+
     pollInterval = setInterval(checkProcess, POLL_INTERVAL)
 })
 
