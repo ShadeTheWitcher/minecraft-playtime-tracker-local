@@ -75,11 +75,13 @@ function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
         },
-        width: 800,
-        height: 700,
+        width: 1100,
+        height: 750,
+        minWidth: 900,
+        minHeight: 600,
         autoHideMenuBar: true,
         backgroundColor: '#2c2c2c',
-        resizable: false,
+        resizable: true,
     })
 
     win.webContents.on('did-finish-load', () => {

@@ -2,126 +2,63 @@
 
 :root {
   --bg-color: #202020;
-  --card-bg: #333333;
-  --text-color: #dddddd;
-  --accent-color: #4cd964;
-  /* Brighter Green */
-  --inactive-color: #ff3b30;
-  /* Brighter Red */
-  --secondary-text: #999999;
-  --border-color: #000000;
+  --panel-bg: #2a2a2a;
+  --text-color: #dcdcdc;
+  --accent-blue: #5b6ee1;
+  --accent-green: #4cd964;
+  --border-color: #000;
 }
 
 body {
   margin: 0;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  /* Start from top */
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  /* Reset padding */
+  width: 100vw;
+  height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Press Start 2P', cursive;
   overflow: hidden;
-  padding-top: 2rem;
 }
 
-.container {
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* New Main Layout */
+.app-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.main-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background-color: var(--bg-color);
   display: flex;
   flex-direction: column;
-  width: 95%;
-  max-width: 760px;
-  /* Increased from 500px */
-  gap: 1.5rem;
+  gap: 20px;
+}
+
+/* Reusable Pixel Card */
+.pixel-card {
+  background-color: #333;
+  padding: 1.5rem;
+  box-shadow:
+    -4px 0 0 0 #000,
+    4px 0 0 0 #000,
+    0 -4px 0 0 #000,
+    0 4px 0 0 #000;
+  margin: 4px;
 }
 
 .title {
-  font-size: 1.2rem;
-  color: #fff;
-  text-align: center;
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  text-shadow: 2px 2px 0 #000;
-}
-
-/* Pixel Art Card Style */
-.pixel-card {
-  background-color: var(--card-bg);
-  padding: 1.5rem;
-  position: relative;
-  box-shadow:
-    -4px 0 0 0 var(--border-color),
-    4px 0 0 0 var(--border-color),
-    0 -4px 0 0 var(--border-color),
-    0 4px 0 0 var(--border-color);
-  margin: 4px;
-  /* Space for box-shadow border */
-}
-
-/* Status Banner */
-.status-card {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 1rem;
   font-size: 1rem;
-  font-weight: bold;
-}
-
-.status-card.active {
-  color: var(--bg-color);
-  background-color: var(--accent-color);
-  box-shadow:
-    -4px 0 0 0 var(--accent-color),
-    4px 0 0 0 var(--accent-color),
-    0 -4px 0 0 var(--accent-color),
-    0 4px 0 0 var(--accent-color),
-    0 0 0 4px var(--border-color);
-  /* Double border effect */
-}
-
-.status-card.inactive {
-  color: var(--text-color);
-  background-color: var(--card-bg);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  /* Two columns */
-  gap: 2rem;
-  margin-top: 1rem;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.stat-item.full-width {
-  grid-column: span 2;
-  margin-bottom: 1rem;
-  border-bottom: 4px solid var(--bg-color);
-  padding-bottom: 1.5rem;
-}
-
-.stat-label {
-  font-size: 0.7rem;
-  color: var(--secondary-text);
-  text-transform: uppercase;
-}
-
-.stat-value {
-  font-size: 1.2rem;
   color: #fff;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
   text-shadow: 2px 2px 0 #000;
-}
-
-.stat-value.big {
-  font-size: 2.5rem;
-  color: var(--accent-color);
 }

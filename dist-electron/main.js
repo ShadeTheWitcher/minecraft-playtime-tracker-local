@@ -16117,11 +16117,13 @@ function createWindow() {
     webPreferences: {
       preload: path$1.join(__dirname$1, "preload.mjs")
     },
-    width: 800,
-    height: 700,
+    width: 1100,
+    height: 750,
+    minWidth: 900,
+    minHeight: 600,
     autoHideMenuBar: true,
     backgroundColor: "#2c2c2c",
-    resizable: false
+    resizable: true
   });
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
