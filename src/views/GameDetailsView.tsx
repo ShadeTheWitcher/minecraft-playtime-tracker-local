@@ -11,6 +11,7 @@ interface GameDetailsProps {
     lastSession: number;
     history: HistoryItem[];
     formatTime: (seconds: number) => string;
+    onEdit: () => void;
 }
 
 export function GameDetailsView({
@@ -20,7 +21,8 @@ export function GameDetailsView({
     sessionTime,
     lastSession,
     history,
-    formatTime
+    formatTime,
+    onEdit
 }: GameDetailsProps) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: '800px' }}>
@@ -31,12 +33,28 @@ export function GameDetailsView({
                 borderBottom: `4px solid ${isRunning ? '#4cd964' : '#000'}`,
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                position: 'relative' // For absolute positioning if needed
             }}>
                 <div>
-                    <h1 style={{ fontSize: '1.5rem', color: '#fff', textShadow: '2px 2px #000', margin: 0 }}>
-                        {gameName}
-                    </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <h1 style={{ fontSize: '1.5rem', color: '#fff', textShadow: '2px 2px #000', margin: 0 }}>
+                            {gameName}
+                        </h1>
+                        <button
+                            onClick={onEdit}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '1rem',
+                                opacity: 0.7
+                            }}
+                            title="Edit Game"
+                        >
+                            ✏️
+                        </button>
+                    </div>
                     {isRunning && <span style={{ color: '#4cd964', fontSize: '0.8rem', marginTop: '10px', display: 'block' }}>• RUNNING NOW</span>}
                 </div>
                 <div style={{ textAlign: 'right' }}>

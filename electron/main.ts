@@ -338,6 +338,30 @@ ipcMain.on('add-game', (_event, { name, processName }: { name: string; processNa
     sendStateUpdate()
 })
 
+ipcMain.on('edit-game', (_event, { id, name, processNames }: { id: string; name: string; processNames: string[] }) => {
+    console.log(`[IPC] Received edit-game request: ${id} -> ${name}`)
+
+    if (!GAMES[id]) {
+        console.error(`[IPC] Edit failed: Game ${id} not found`)
+        return
+    }
+
+    // Update Memory
+    GAMES[id].name = name
+    GAMES[id].processNames = processNames
+
+    // Update Store
+    store.set('gameDefinitions', GAMES)
+
+    // Trigger Sync to push changes to cloud (if logged in)
+    if (currentUser) {
+        // We set sync to false temporarily to force a run if needed, but better to just call it
+        syncWithSupabase().catch(err => console.error('[IPC] Sync after edit failed:', err))
+    }
+
+    sendStateUpdate()
+})
+
 ipcMain.handle('settings:get', () => {
     return getUserSettings()
 })
@@ -521,6 +545,7 @@ async function syncWithSupabase() {
                         user_id: currentUser.id,
                         identifier: gameId,
                         name: GAMES[gameId]?.name || gameId,
+                        process_names: GAMES[gameId]?.processNames || [], // PUSH: Sync process names
                         total_time: newTotal,
                         last_session: data.lastSession // Update last session to latest local
                     }, { onConflict: 'user_id, identifier' })
@@ -606,11 +631,54 @@ async function syncWithSupabase() {
                     store.set(getStorePath(`games.${gameId}`), data)
                 }
             }
-
-
-        } catch (e) {
-            console.error(`[Sync] Error processing ${gameId}:`, e)
+        } catch (err) {
+            console.error(`[Sync] Error processing game ${gameId}:`, err)
         }
+    }
+
+    // 6. DISCOVERY: Pull new games from Cloud that we don't have locally
+    try {
+        const { data: allRemoteGames, error: discoveryError } = await supabase
+            .from('games')
+            .select('*')
+            .eq('user_id', currentUser.id)
+
+        if (!discoveryError && allRemoteGames) {
+            let discoveredCount = 0
+            for (const remoteGame of allRemoteGames) {
+                if (!GAMES[remoteGame.identifier]) {
+                    console.log(`[Sync] Discovered new game from cloud: ${remoteGame.name} (${remoteGame.identifier})`)
+
+                    // Create Definition
+                    const newGameConfig: GameConfig = {
+                        id: remoteGame.identifier,
+                        name: remoteGame.name,
+                        processNames: remoteGame.process_names || [] // PULL: Restore process names
+                    }
+
+                    // Update Memory & Store
+                    GAMES[remoteGame.identifier] = newGameConfig
+
+                    // Initialize Stats with remote values
+                    const initialStats = {
+                        totalPlaytime: remoteGame.total_time || 0,
+                        lastSession: remoteGame.last_session || 0,
+                        history: [] // We'll let the history puller fill this later if needed, or leave empty
+                    }
+                    store.set(getStorePath(`games.${remoteGame.identifier}`), initialStats)
+
+                    discoveredCount++
+                }
+            }
+
+            if (discoveredCount > 0) {
+                store.set('gameDefinitions', GAMES) // Save new definitions
+                console.log(`[Sync] Added ${discoveredCount} new games from cloud.`)
+                sendStateUpdate() // Refresh UI immediately
+            }
+        }
+    } catch (e) {
+        console.error('[Sync] Discovery failed:', e)
     }
 
     isSyncing = false

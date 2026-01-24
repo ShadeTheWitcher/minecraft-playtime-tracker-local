@@ -3,6 +3,7 @@ import './App.css'
 import { Sidebar } from './components/Sidebar'
 import { AddGameView } from './views/AddGameView'
 import { GameDetailsView } from './views/GameDetailsView'
+import { EditGameView } from './views/EditGameView'
 import SettingsView from './views/SettingsView'
 import { AuthModal } from './components/AuthModal'
 import { supabase } from './lib/supabase'
@@ -32,7 +33,7 @@ function App() {
 
   // UI State
   const [selectedGameId, setSelectedGameId] = useState<string>('minecraft')
-  const [viewMode, setViewMode] = useState<'details' | 'add' | 'settings'>('details')
+  const [viewMode, setViewMode] = useState<'details' | 'add' | 'settings' | 'edit'>('details')
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   // Profile State
@@ -149,6 +150,14 @@ function App() {
     window.location.reload()
   }
 
+  const handleEditGame = (id: string, name: string, processNames: string[]) => {
+    // Send update to Backend
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('edit-game', { id, name, processNames })
+    }
+    setViewMode('details')
+  }
+
   return (
     <div className="app-layout">
       {showAuthModal && (
@@ -174,11 +183,20 @@ function App() {
         isConfigured={!!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY}
       />
 
-      <main className="main-content">
+      <main className="content-area">
+        {/* Conditional Rendering for Main Content */}
         {viewMode === 'add' ? (
           <AddGameView games={state.games} />
         ) : viewMode === 'settings' ? (
           <SettingsView userEmail={user?.email} />
+        ) : viewMode === 'edit' && selectedGameMeta ? (
+          <EditGameView
+            gameId={selectedGameMeta.id}
+            initialName={selectedGameMeta.name}
+            initialProcessNames={selectedGameMeta.processNames || []}
+            onSave={handleEditGame}
+            onCancel={() => setViewMode('details')}
+          />
         ) : (
           selectedGameMeta ? (
             <GameDetailsView
@@ -190,6 +208,7 @@ function App() {
               lastSession={selectedGameMeta.lastSession || 0} // Stored last session
               history={selectedGameMeta.history || []} // Stored history
               formatTime={formatTime}
+              onEdit={() => setViewMode('edit')}
             />
           ) : (
             <div style={{ padding: '20px', color: '#888' }}>

@@ -16,6 +16,7 @@ export interface AppState {
     games: {
         id: string;
         name: string;
+        processNames: string[];
         totalTime: number;
         lastSession: number;
         history: HistoryItem[];
