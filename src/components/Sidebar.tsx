@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import './Sidebar.css'
 import ConfirmationModal from './ConfirmationModal';
 

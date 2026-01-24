@@ -46,6 +46,7 @@
       "target": "portable",
       "icon": "public/app_icon.png"
     },
+    "cscLink": null,
     "files": [
       "dist",
       "dist-electron"
