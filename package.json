@@ -35,5 +35,20 @@
     "vite": "^7.2.4",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "com.shadethewitcher.minecrafttracker",
+    "productName": "Minecraft Playtime Tracker",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "public/app_icon.png"
+    },
+    "files": [
+      "dist",
+      "dist-electron"
+    ]
   }
 }
