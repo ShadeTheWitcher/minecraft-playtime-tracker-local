@@ -36,26 +36,32 @@ export function GameDetailsView({
                 alignItems: 'center',
                 position: 'relative' // For absolute positioning if needed
             }}>
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <h1 style={{ fontSize: '1.5rem', color: '#fff', textShadow: '2px 2px #000', margin: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <button
+                        onClick={onEdit}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '1.2rem',
+                            opacity: 0.5,
+                            padding: '5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'opacity 0.2s'
+                        }}
+                        title="Edit Game Settings"
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
+                    >
+                        ⚙️
+                    </button>
+                    <div>
+                        <h1 style={{ fontSize: '1.5rem', color: '#fff', textShadow: '2px 2px #000', margin: 0, lineHeight: 1 }}>
                             {gameName}
                         </h1>
-                        <button
-                            onClick={onEdit}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                fontSize: '1rem',
-                                opacity: 0.7
-                            }}
-                            title="Edit Game"
-                        >
-                            ✏️
-                        </button>
+                        {isRunning && <span style={{ color: '#4cd964', fontSize: '0.8rem', marginTop: '5px', display: 'block' }}>• RUNNING NOW</span>}
                     </div>
-                    {isRunning && <span style={{ color: '#4cd964', fontSize: '0.8rem', marginTop: '10px', display: 'block' }}>• RUNNING NOW</span>}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '0.7rem', color: '#aaa' }}>TOTAL PLAYTIME</div>
