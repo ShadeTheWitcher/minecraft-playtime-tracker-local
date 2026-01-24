@@ -116,11 +116,11 @@ const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
 function createWindow() {
     win = new BrowserWindow({
-        icon: path.join(process.env.VITE_PUBLIC as string, 'vite.svg'),
+        icon: path.join(process.env.VITE_PUBLIC as string, 'app_icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
         },
-        width: 1100,
+        width: 1200,
         height: 750,
         minWidth: 900,
         minHeight: 600,
@@ -207,7 +207,7 @@ function setActiveUser(userId: string, email?: string) {
 }
 
 function createTray() {
-    const icon = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC as string, 'vite.svg'))
+    const icon = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC as string, 'app_icon.png'))
     tray = new Tray(icon)
     const contextMenu = Menu.buildFromTemplate([
         { label: 'Open Tracker', click: () => win?.show() },
