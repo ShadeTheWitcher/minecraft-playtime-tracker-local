@@ -50,3 +50,27 @@ with check (auth.uid() = user_id);
 create index idx_games_user_id on public.games(user_id);
 create index idx_playtime_user_id on public.playtime_entries(user_id);
 create index idx_playtime_game_id on public.playtime_entries(game_identifier);
+
+-- 3. Profiles Table (User Metadata)
+create table public.profiles (
+  id uuid references auth.users not null primary key,
+  display_name text,
+  updated_at timestamptz default now()
+);
+
+alter table public.profiles enable row level security;
+
+create policy "Users can view their own profile"
+on public.profiles for select
+using (auth.uid() = id);
+
+create policy "Users can update their own profile"
+on public.profiles for update
+using (auth.uid() = id);
+
+create policy "Users can insert their own profile"
+on public.profiles for insert
+with check (auth.uid() = id);
+
+-- Trigger to handle new user creation (Optional, but good for auto-profile creation)
+-- for now, we'll handle upsert in the app.
