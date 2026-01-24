@@ -103,14 +103,24 @@ export function Sidebar({
                             </div>
                         </div>
                     ) : (
-                        <button
-                            className={`login-btn ${!isConfigured ? 'disabled' : ''}`}
-                            onClick={isConfigured ? onLogin : undefined}
-                            title={!isConfigured ? "Setup .env details to enable sync" : "Login/Sync"}
-                            style={!isConfigured ? { opacity: 0.5, cursor: 'not-allowed', backgroundColor: '#555' } : {}}
-                        >
-                            {!isConfigured ? "SETUP REQUIRED" : "LOGIN / SYNC"}
-                        </button>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
+                            <button
+                                className={`login-btn ${!isConfigured ? 'disabled' : ''}`}
+                                onClick={isConfigured ? onLogin : undefined}
+                                title={!isConfigured ? "Setup .env details to enable sync" : "Login/Sync"}
+                                style={{ flex: 1, ...(!isConfigured ? { opacity: 0.5, cursor: 'not-allowed', backgroundColor: '#555' } : {}) }}
+                            >
+                                {!isConfigured ? "SETUP REQUIRED" : "LOGIN / SYNC"}
+                            </button>
+                            <button
+                                className="icon-btn settings-btn"
+                                onClick={onSettings}
+                                title="Settings"
+                                style={{ padding: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', border: 'none', cursor: 'pointer', color: '#aaa' }}
+                            >
+                                ⚙️
+                            </button>
+                        </div>
                     )}
                 </div>
             </aside>

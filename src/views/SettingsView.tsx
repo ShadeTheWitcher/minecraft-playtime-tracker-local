@@ -52,7 +52,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
                         type="text"
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
-                        placeholder="Enter your username"
+                        placeholder={userEmail ? (language === 'es' ? "Ingresa tu nombre" : "Enter your username") : (language === 'es' ? "Inicia sesión para cambiar" : "Login to change")}
+                        disabled={!userEmail}
+                        style={!userEmail ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                     />
                 </div>
             </div>
