@@ -11,4 +11,5 @@ export interface AppState {
     history: HistoryItem[]
     activeGameId: string
     gameName: string
+    games: { id: string; name: string }[]
 }

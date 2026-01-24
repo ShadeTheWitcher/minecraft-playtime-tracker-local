@@ -215,6 +215,8 @@ function sendStateUpdate() {
     if (win) {
         const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
 
+        const gamesList = Object.values(GAMES).map(g => ({ id: g.id, name: g.name }))
+
         win.webContents.send('app-state', {
             activeGameId: activeGameId,
             gameName: GAMES[activeGameId]?.name || 'Unknown',
@@ -222,7 +224,8 @@ function sendStateUpdate() {
             sessionTime: sessionPlaytime,
             totalTime: gameData.totalPlaytime || 0,
             lastSession: gameData.lastSession || 0,
-            history: (gameData.history || []).slice(-50).reverse()
+            history: (gameData.history || []).slice(-50).reverse(),
+            games: gamesList
         })
     }
 }

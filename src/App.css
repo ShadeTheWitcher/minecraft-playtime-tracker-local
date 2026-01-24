@@ -30,8 +30,9 @@ body {
 .container {
   display: flex;
   flex-direction: column;
-  width: 90%;
-  max-width: 500px;
+  width: 95%;
+  max-width: 760px;
+  /* Increased from 500px */
   gap: 1.5rem;
 }
 

@@ -1,8 +1,8 @@
 import './Navbar.css'
 
 interface NavbarProps {
-    activeTab: 'dashboard' | 'history';
-    onTabChange: (tab: 'dashboard' | 'history') => void;
+    activeTab: 'dashboard' | 'history' | 'add';
+    onTabChange: (tab: 'dashboard' | 'history' | 'add') => void;
 }
 
 export function Navbar({ activeTab, onTabChange }: NavbarProps) {
@@ -19,6 +19,12 @@ export function Navbar({ activeTab, onTabChange }: NavbarProps) {
                 onClick={() => onTabChange('history')}
             >
                 HISTORY
+            </button>
+            <button
+                className={`nav-btn ${activeTab === 'add' ? 'active' : ''}`}
+                onClick={() => onTabChange('add')}
+            >
+                ADD
             </button>
         </nav>
     )

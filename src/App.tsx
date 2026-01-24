@@ -3,6 +3,7 @@ import './App.css'
 import { Navbar } from './components/Navbar'
 import { DashboardView } from './views/DashboardView'
 import { HistoryView } from './views/HistoryView'
+import { AddGameView } from './views/AddGameView'
 import type { AppState } from './types'
 
 function formatTime(seconds: number) {
@@ -20,9 +21,10 @@ function App() {
     lastSession: 0,
     history: [],
     activeGameId: 'minecraft',
-    gameName: 'Minecraft'
+    gameName: 'Minecraft',
+    games: []
   })
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'history'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'add'>('dashboard')
 
   useEffect(() => {
     // Safety check for IPC
@@ -39,7 +41,8 @@ function App() {
           lastSession: newState.lastSession || 0,
           history: newState.history || [],
           activeGameId: newState.activeGameId || 'minecraft',
-          gameName: newState.gameName || 'Minecraft'
+          gameName: newState.gameName || 'Minecraft',
+          games: newState.games || []
         }
         setState(safeState)
       })
@@ -65,6 +68,10 @@ function App() {
 
       {activeTab === 'history' && (
         <HistoryView history={state.history} formatTime={formatTime} gameName={state.gameName} />
+      )}
+
+      {activeTab === 'add' && (
+        <AddGameView />
       )}
     </div>
   )
