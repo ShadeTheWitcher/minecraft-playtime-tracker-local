@@ -154,7 +154,8 @@ function sendStateUpdate() {
         win.webContents.send('app-state', {
             isPlaying: isMinecraftRunning,
             sessionTime: sessionPlaytime,
-            totalTime: store.get('totalPlaytime')
+            totalTime: store.get('totalPlaytime'),
+            lastSession: store.get('lastSession') || 0
         })
     }
 }

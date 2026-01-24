@@ -5,6 +5,7 @@ interface AppState {
   isPlaying: boolean
   sessionTime: number
   totalTime: number
+  lastSession: number
 }
 
 function formatTime(seconds: number) {
@@ -15,7 +16,7 @@ function formatTime(seconds: number) {
 }
 
 function App() {
-  const [state, setState] = useState<AppState>({ isPlaying: false, sessionTime: 0, totalTime: 0 })
+  const [state, setState] = useState<AppState>({ isPlaying: false, sessionTime: 0, totalTime: 0, lastSession: 0 })
 
   useEffect(() => {
     // Listen for state updates from main process
@@ -41,6 +42,11 @@ function App() {
       <div className="timer-section">
         <h2>Session</h2>
         <div className="timer big-text">{formatTime(state.sessionTime)}</div>
+      </div>
+
+      <div className="timer-section">
+        <h2>Last Session</h2>
+        <div className="timer small-text">{formatTime(state.lastSession)}</div>
       </div>
 
       <div className="timer-section">
