@@ -46,6 +46,22 @@ const store = new Store({
     }
 })
 
+// DEBUG: Inject test data if empty
+const mcData = store.get('games.minecraft') as any || {}
+if (!mcData.history || mcData.history.length === 0) {
+    console.log('[DEBUG] Injecting test history for Minecraft')
+    store.set('games.minecraft', {
+        totalPlaytime: 120,
+        lastSession: 60,
+        history: [
+            { date: new Date().toISOString(), duration: 60 },
+            { date: new Date(Date.now() - 86400000).toISOString(), duration: 60 }
+        ]
+    })
+}
+
+// State
+
 // Load definitions into memory
 let GAMES: Record<string, GameConfig> = (store.get('gameDefinitions') as Record<string, GameConfig>) || defaultGames
 
@@ -256,11 +272,13 @@ function sendStateUpdate() {
         const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
 
         const gamesList = Object.values(GAMES).map(g => {
-            const gData = store.get(`games.${g.id}`) as any || { totalPlaytime: 0 }
+            const gData = store.get(`games.${g.id}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
             return {
                 id: g.id,
                 name: g.name,
-                totalTime: gData.totalPlaytime || 0
+                totalTime: gData.totalPlaytime || 0,
+                lastSession: gData.lastSession || 0,
+                history: (gData.history || []).slice(-50).reverse()
             }
         })
 

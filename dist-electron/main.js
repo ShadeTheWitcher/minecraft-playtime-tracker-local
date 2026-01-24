@@ -16096,6 +16096,18 @@ const store = new ElectronStore({
     gameDefinitions: defaultGames
   }
 });
+const mcData = store.get("games.minecraft") || {};
+if (!mcData.history || mcData.history.length === 0) {
+  console.log("[DEBUG] Injecting test history for Minecraft");
+  store.set("games.minecraft", {
+    totalPlaytime: 120,
+    lastSession: 60,
+    history: [
+      { date: (/* @__PURE__ */ new Date()).toISOString(), duration: 60 },
+      { date: new Date(Date.now() - 864e5).toISOString(), duration: 60 }
+    ]
+  });
+}
 let GAMES = store.get("gameDefinitions") || defaultGames;
 if (!store.get("gameDefinitions")) {
   store.set("gameDefinitions", GAMES);
@@ -16253,11 +16265,13 @@ function sendStateUpdate() {
   if (win) {
     const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
     const gamesList = Object.values(GAMES).map((g) => {
-      const gData = store.get(`games.${g.id}`) || { totalPlaytime: 0 };
+      const gData = store.get(`games.${g.id}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
       return {
         id: g.id,
         name: g.name,
-        totalTime: gData.totalPlaytime || 0
+        totalTime: gData.totalPlaytime || 0,
+        lastSession: gData.lastSession || 0,
+        history: (gData.history || []).slice(-50).reverse()
       };
     });
     win.webContents.send("app-state", {
