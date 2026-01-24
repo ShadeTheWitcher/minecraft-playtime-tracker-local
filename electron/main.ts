@@ -21,7 +21,7 @@ interface GameConfig {
     processNames: string[];
 }
 
-const GAMES: Record<string, GameConfig> = {
+const defaultGames: Record<string, GameConfig> = {
     minecraft: {
         id: 'minecraft',
         name: 'Minecraft',
@@ -41,9 +41,18 @@ const store = new Store({
         games: {
             minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
             hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
-        }
+        },
+        gameDefinitions: defaultGames
     }
 })
+
+// Load definitions into memory
+let GAMES: Record<string, GameConfig> = (store.get('gameDefinitions') as Record<string, GameConfig>) || defaultGames
+
+// Ensure store has them if they were missing (migration)
+if (!store.get('gameDefinitions')) {
+    store.set('gameDefinitions', GAMES)
+}
 
 // State
 let activeGameId = store.get('activeGameId') as string || 'minecraft'
@@ -131,6 +140,35 @@ ipcMain.on('set-active-game', (_event, gameId: string) => {
             sendStateUpdate()
         }
     }
+})
+
+ipcMain.on('add-game', (_event, { name, processName }: { name: string; processName: string }) => {
+    console.log(`[IPC] Received add-game request: ${name} (${processName})`)
+    const id = name.toLowerCase().replace(/\s+/g, '-')
+
+    if (GAMES[id]) {
+        console.log(`[IPC] Game ${name} already exists. ID: ${id}`)
+        return
+    }
+
+    const newGame: GameConfig = {
+        id,
+        name,
+        processNames: [processName]
+    }
+
+    // Update Memory
+    GAMES[id] = newGame
+
+    // Update Store
+    store.set('gameDefinitions', GAMES)
+
+    // Initialize stats for new game
+    const gameStats = { totalPlaytime: 0, lastSession: 0, history: [] }
+    store.set(`games.${id}`, gameStats)
+
+    console.log(`[IPC] Game saved: ${name}`)
+    sendStateUpdate()
 })
 
 async function checkProcess() {

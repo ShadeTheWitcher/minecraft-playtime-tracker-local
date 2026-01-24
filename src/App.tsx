@@ -71,7 +71,7 @@ function App() {
       )}
 
       {activeTab === 'add' && (
-        <AddGameView />
+        <AddGameView games={state.games} />
       )}
     </div>
   )

@@ -494,7 +494,7 @@ if (!IS_WINDOWS) {
 if (IS_LINUX) {
   Signals.push("SIGIO", "SIGPOLL", "SIGPWR", "SIGSTKFLT");
 }
-class Interceptor {
+let Interceptor$1 = class Interceptor {
   /* CONSTRUCTOR */
   constructor() {
     this.callbacks = /* @__PURE__ */ new Set();
@@ -531,9 +531,9 @@ class Interceptor {
     };
     this.hook();
   }
-}
-const Interceptor$1 = new Interceptor();
-const whenExit = Interceptor$1.register;
+};
+const Interceptor2 = new Interceptor$1();
+const whenExit = Interceptor2.register;
 const Temp = {
   /* VARIABLES */
   store: {},
@@ -16074,7 +16074,7 @@ const execAsync = util$2.promisify(exec);
 const __dirname$1 = path$1.dirname(fileURLToPath(import.meta.url));
 const POLL_INTERVAL = 1e3;
 app$1.disableHardwareAcceleration();
-const GAMES = {
+const defaultGames = {
   minecraft: {
     id: "minecraft",
     name: "Minecraft",
@@ -16092,9 +16092,14 @@ const store = new ElectronStore({
     games: {
       minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
       hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
-    }
+    },
+    gameDefinitions: defaultGames
   }
 });
+let GAMES = store.get("gameDefinitions") || defaultGames;
+if (!store.get("gameDefinitions")) {
+  store.set("gameDefinitions", GAMES);
+}
 let activeGameId = store.get("activeGameId") || "minecraft";
 let isGameRunning = false;
 let sessionStartTime = null;
@@ -16167,6 +16172,25 @@ ipcMain$1.on("set-active-game", (_event, gameId) => {
       sendStateUpdate();
     }
   }
+});
+ipcMain$1.on("add-game", (_event, { name, processName }) => {
+  console.log(`[IPC] Received add-game request: ${name} (${processName})`);
+  const id2 = name.toLowerCase().replace(/\s+/g, "-");
+  if (GAMES[id2]) {
+    console.log(`[IPC] Game ${name} already exists. ID: ${id2}`);
+    return;
+  }
+  const newGame = {
+    id: id2,
+    name,
+    processNames: [processName]
+  };
+  GAMES[id2] = newGame;
+  store.set("gameDefinitions", GAMES);
+  const gameStats = { totalPlaytime: 0, lastSession: 0, history: [] };
+  store.set(`games.${id2}`, gameStats);
+  console.log(`[IPC] Game saved: ${name}`);
+  sendStateUpdate();
 });
 async function checkProcess() {
   try {
