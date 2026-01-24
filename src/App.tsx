@@ -24,6 +24,8 @@ function App() {
     sessionTime: 0,
     totalTime: 0,
     language: 'es', // Default
+    runAtStartup: false,
+    minimizeToTray: true,
     lastSession: 0,
     history: [],
     activeGameId: 'minecraft',

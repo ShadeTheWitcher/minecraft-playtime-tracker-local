@@ -49,7 +49,10 @@ const store = new Store({
                 },
                 settings: {
                     autoSync: true,
-                    displayName: 'Guest'
+                    displayName: 'Guest',
+                    language: 'es',
+                    runAtStartup: false,
+                    minimizeToTray: true
                 }
             }
         },
@@ -113,7 +116,7 @@ const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
 function createWindow() {
     win = new BrowserWindow({
-        icon: path.join(process.env.VITE_PUBLIC as string, 'electron-vite.svg'),
+        icon: path.join(process.env.VITE_PUBLIC as string, 'vite.svg'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
         },
@@ -140,10 +143,14 @@ function createWindow() {
 
     win.on('close', (event) => {
         if (!isQuitting) {
-            event.preventDefault()
-            win?.hide()
+            const settings = getUserSettings()
+            if (settings.minimizeToTray !== false) {
+                event.preventDefault()
+                win?.hide()
+                return false
+            }
         }
-        return false
+        return true
     })
 }
 
@@ -178,7 +185,10 @@ function setActiveUser(userId: string, email?: string) {
             games: initialGames,
             settings: {
                 autoSync: true,
-                displayName: defaultName
+                displayName: defaultName,
+                language: 'es',
+                runAtStartup: false,
+                minimizeToTray: true
             }
         })
     } else {
@@ -197,7 +207,7 @@ function setActiveUser(userId: string, email?: string) {
 }
 
 function createTray() {
-    const icon = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC as string, 'electron-vite.svg'))
+    const icon = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC as string, 'vite.svg'))
     tray = new Tray(icon)
     const contextMenu = Menu.buildFromTemplate([
         { label: 'Open Tracker', click: () => win?.show() },
@@ -384,6 +394,15 @@ ipcMain.handle('settings:set', (_event, newSettings) => {
         }).then(({ error }) => {
             if (error) console.error('[Profile] Failed to sync display name:', error)
             else console.log('[Profile] Display name synced to Supabase')
+        })
+    }
+
+    // Handle Startup Setting
+    if (newSettings.runAtStartup !== undefined) {
+        console.log(`[Settings] Setting openAtLogin to: ${newSettings.runAtStartup}`)
+        app.setLoginItemSettings({
+            openAtLogin: newSettings.runAtStartup,
+            path: app.getPath('exe')
         })
     }
 })
@@ -712,7 +731,9 @@ function sendStateUpdate() {
             lastSession: gameData.lastSession || 0,
             history: (gameData.history || []).slice(-50).reverse(),
             displayName: settings.displayName || '',
-            language: settings.language || 'es', // Default to Spanish as requested
+            language: settings.language || 'es',
+            runAtStartup: settings.runAtStartup || false,
+            minimizeToTray: settings.minimizeToTray !== undefined ? settings.minimizeToTray : true,
             games: gamesList,
             isOnline: isOnline
         })

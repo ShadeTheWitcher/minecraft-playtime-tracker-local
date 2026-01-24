@@ -9,6 +9,8 @@ export interface AppState {
     sessionTime: number
     displayName: string
     language: 'en' | 'es'
+    runAtStartup: boolean
+    minimizeToTray: boolean
     totalTime: number
     lastSession: number
     history: HistoryItem[]
