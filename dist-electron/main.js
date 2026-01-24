@@ -494,7 +494,7 @@ if (!IS_WINDOWS) {
 if (IS_LINUX) {
   Signals.push("SIGIO", "SIGPOLL", "SIGPWR", "SIGSTKFLT");
 }
-let Interceptor$1 = class Interceptor {
+class Interceptor {
   /* CONSTRUCTOR */
   constructor() {
     this.callbacks = /* @__PURE__ */ new Set();
@@ -531,9 +531,9 @@ let Interceptor$1 = class Interceptor {
     };
     this.hook();
   }
-};
-const Interceptor2 = new Interceptor$1();
-const whenExit = Interceptor2.register;
+}
+const Interceptor$1 = new Interceptor();
+const whenExit = Interceptor$1.register;
 const Temp = {
   /* VARIABLES */
   store: {},
@@ -16226,7 +16226,14 @@ async function checkProcess() {
 function sendStateUpdate() {
   if (win) {
     const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
-    const gamesList = Object.values(GAMES).map((g) => ({ id: g.id, name: g.name }));
+    const gamesList = Object.values(GAMES).map((g) => {
+      const gData = store.get(`games.${g.id}`) || { totalPlaytime: 0 };
+      return {
+        id: g.id,
+        name: g.name,
+        totalTime: gData.totalPlaytime || 0
+      };
+    });
     win.webContents.send("app-state", {
       activeGameId,
       gameName: GAMES[activeGameId]?.name || "Unknown",

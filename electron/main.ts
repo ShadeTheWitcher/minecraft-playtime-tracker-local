@@ -215,7 +215,14 @@ function sendStateUpdate() {
     if (win) {
         const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
 
-        const gamesList = Object.values(GAMES).map(g => ({ id: g.id, name: g.name }))
+        const gamesList = Object.values(GAMES).map(g => {
+            const gData = store.get(`games.${g.id}`) as any || { totalPlaytime: 0 }
+            return {
+                id: g.id,
+                name: g.name,
+                totalTime: gData.totalPlaytime || 0
+            }
+        })
 
         win.webContents.send('app-state', {
             activeGameId: activeGameId,

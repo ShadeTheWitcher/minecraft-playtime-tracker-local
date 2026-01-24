@@ -58,8 +58,11 @@ export function DashboardView({ state, formatTime }: DashboardViewProps) {
                                     justifyContent: 'space-between'
                                 }}
                             >
-                                <span>{game.name}</span>
-                                {state.activeGameId === game.id && <span>★</span>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    {state.activeGameId === game.id && <span style={{ color: '#4cd964' }}>★</span>}
+                                    <span>{game.name}</span>
+                                </div>
+                                <span style={{ fontFamily: 'monospace' }}>{formatTime(game.totalTime)}</span>
                             </div>
                         ))}
                     </div>
