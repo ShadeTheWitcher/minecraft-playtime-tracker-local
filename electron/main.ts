@@ -147,7 +147,7 @@ function createWindow() {
     })
 }
 
-function setActiveUser(userId: string) {
+function setActiveUser(userId: string, email?: string) {
     console.log(`[User] Switching context to: ${userId}`)
     activeUserId = userId
     store.set('activeUserId', userId)
@@ -172,13 +172,25 @@ function setActiveUser(userId: string) {
             }
         }
 
+        const defaultName = email ? email.split('@')[0] : (userId === 'guest' ? 'Guest' : '')
+
         store.set(`users.${userId}` as any, {
             games: initialGames,
             settings: {
                 autoSync: true,
-                displayName: userId === 'guest' ? 'Guest' : ''
+                displayName: defaultName
             }
         })
+    } else {
+        // Bucket exists. Check if we need to auto-correct "Guest" name for logged-in user
+        if (email) {
+            const currentSettings = store.get(`users.${userId}.settings` as any) as any
+            if (currentSettings && currentSettings.displayName === 'Guest') {
+                console.log(`[User] Auto-correcting 'Guest' name to ${email}`)
+                currentSettings.displayName = email.split('@')[0]
+                store.set(`users.${userId}.settings` as any, currentSettings)
+            }
+        }
     }
 
     sendStateUpdate()
@@ -237,16 +249,21 @@ ipcMain.on('auth:session', async (_event, session) => {
                 if (error.message && (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND'))) {
                     console.log('[Auth] Offline mode: Could not authenticate with Supabase.')
                     isOnline = false
+                    isOnline = false
                 } else {
                     console.error('[Auth] Failed to set session in Main:', error)
                     isOnline = false
+
+                    // Critical Error: Session is invalid/expired. Tell Frontend to purge it.
+                    console.log('[Auth] requesting Frontend to Force Logout...')
+                    _event.sender.send('auth:force-logout')
                 }
             } else {
                 console.log('[Auth] Main process authenticated successfully')
                 isOnline = true
 
-                // SWITCH TO USER CONTEXT
-                setActiveUser(session.user.id)
+                // SWITCH TO USER CONTEXT (Pass email for default display name)
+                setActiveUser(session.user.id, session.user.email)
 
                 // Trigger sync now that we are authenticated
                 await syncWithSupabase()
@@ -605,6 +622,7 @@ function sendStateUpdate() {
     if (win) {
         // STORE: Scoped
         const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+        const settings = getUserSettings()
 
         const gamesList = Object.values(GAMES).map(g => {
             const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
@@ -625,6 +643,7 @@ function sendStateUpdate() {
             totalTime: gameData.totalPlaytime || 0,
             lastSession: gameData.lastSession || 0,
             history: (gameData.history || []).slice(-50).reverse(),
+            displayName: settings.displayName || '',
             games: gamesList,
             isOnline: isOnline
         })
@@ -643,6 +662,9 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
+    // Ensure the active user's bucket exists (especially after a reset)
+    setActiveUser(activeUserId)
+
     createWindow()
     createTray()
     pollInterval = setInterval(checkProcess, POLL_INTERVAL)

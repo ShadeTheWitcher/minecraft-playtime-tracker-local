@@ -7,6 +7,7 @@ export interface AppState {
     isOnline: boolean
     isPlaying: boolean
     sessionTime: number
+    displayName: string
     totalTime: number
     lastSession: number
     history: HistoryItem[]

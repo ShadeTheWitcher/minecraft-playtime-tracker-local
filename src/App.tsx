@@ -16,6 +16,7 @@ function formatTime(seconds: number) {
 }
 
 function App() {
+  console.log('App Component Rendering')
   const [state, setState] = useState<AppState>({
     isOnline: true,
     isPlaying: false,
@@ -25,6 +26,7 @@ function App() {
     history: [],
     activeGameId: 'minecraft',
     gameName: 'Minecraft',
+    displayName: '',
     games: []
   })
 
@@ -89,6 +91,24 @@ function App() {
       window.ipcRenderer.on('app-state', (_event: any, newState: AppState) => {
         setState(prev => ({ ...prev, ...newState }));
       })
+
+      // FORCE LOGOUT HANDLER (For when backend rejects invalid tokens)
+      window.ipcRenderer.on('auth:force-logout', async () => {
+        console.warn('Backend requested force logout due to invalid session.')
+
+        // 1. Standard SignOut
+        await supabase.auth.signOut()
+
+        // 2. Nuke LocalStorage (Supabase persistence)
+        localStorage.clear() // Simple and effective for this issue
+
+        // 3. Reset State
+        setUser(null)
+        setDisplayName('')
+
+        // 4. Reload to ensure clean slate (stops any pending retry loops)
+        window.location.reload()
+      })
     }
   }, [])
 
@@ -120,8 +140,13 @@ function App() {
     }
   }
 
-  const handleLogout = () => {
-    supabase.auth.signOut()
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    localStorage.clear()
+    setUser(null)
+    setDisplayName('')
+    // Optional: reload to clean state
+    window.location.reload()
   }
 
   return (
