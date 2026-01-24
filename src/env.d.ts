@@ -2,8 +2,8 @@
 
 interface Window {
     electronAPI: {
-        getSettings: () => Promise<{ displayName?: string; autoSync?: boolean }>
-        setSettings: (settings: { displayName?: string; autoSync?: boolean }) => Promise<void>
+        getSettings: () => Promise<{ displayName?: string; autoSync?: boolean; language?: 'en' | 'es' }>
+        setSettings: (settings: { displayName?: string; autoSync?: boolean; language?: 'en' | 'es' }) => Promise<void>
     }
     ipcRenderer: {
         on(channel: string, func: (...args: any[]) => void): () => void

@@ -12,6 +12,7 @@ interface GameDetailsProps {
     history: HistoryItem[];
     formatTime: (seconds: number) => string;
     onEdit: () => void;
+    language: 'en' | 'es';
 }
 
 export function GameDetailsView({
@@ -22,7 +23,8 @@ export function GameDetailsView({
     lastSession,
     history,
     formatTime,
-    onEdit
+    onEdit,
+    language
 }: GameDetailsProps) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%', paddingRight: '20px' }}>
@@ -56,11 +58,11 @@ export function GameDetailsView({
                             color: '#aaa',
                             marginTop: '2px' // Visual alignment
                         }}
-                        title="Edit Game Settings"
+                        title={language === 'es' ? "Editar Ajustes" : "Edit Game Settings"}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.opacity = '1'
                             e.currentTarget.style.color = '#fff'
-                            e.currentTarget.style.transform = 'rotate(45deg)' // Subtle rotation effect
+                            e.currentTarget.style.transform = 'rotate(45deg)'
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.opacity = '0.5'
@@ -74,18 +76,28 @@ export function GameDetailsView({
                         <h1 style={{ fontSize: '2.5rem', color: '#fff', textShadow: '2px 2px #000', margin: 0, lineHeight: 1, letterSpacing: '-1px' }}>
                             {gameName}
                         </h1>
-                        {isRunning && <span style={{ color: '#4cd964', fontSize: '0.9rem', marginTop: '8px', display: 'block', fontWeight: 'bold', letterSpacing: '1px' }}>• RUNNING NOW</span>}
+                        {isRunning && <span style={{ color: '#4cd964', fontSize: '0.9rem', marginTop: '8px', display: 'block', fontWeight: 'bold', letterSpacing: '1px' }}>
+                            {language === 'es' ? '• CORRIENDO AHORA' : '• RUNNING NOW'}
+                        </span>}
                     </div>
                 </div>
                 <div style={{ textAlign: 'right', minWidth: '150px' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '5px' }}>TOTAL PLAYTIME</div>
+                    <div style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '5px' }}>
+                        {language === 'es' ? 'TIEMPO TOTAL' : 'TOTAL PLAYTIME'}
+                    </div>
                     <div style={{ fontSize: '2rem', color: '#fff' }}>{formatTime(totalTime)}</div>
                     <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px', textTransform: 'uppercase' }}>
                         {(() => {
                             const hours = Math.floor(totalTime / 3600)
                             const minutes = Math.floor((totalTime % 3600) / 60)
-                            if (hours > 0) return `HAS JUGADO ${hours} HORAS Y ${minutes} MINUTOS`
-                            return `HAS JUGADO ${minutes} MINUTOS`
+
+                            if (language === 'es') {
+                                if (hours > 0) return `HAS JUGADO ${hours} HORAS Y ${minutes} MINUTOS`
+                                return `HAS JUGADO ${minutes} MINUTOS`
+                            } else {
+                                if (hours > 0) return `YOU HAVE PLAYED ${hours} HOURS AND ${minutes} MINUTES`
+                                return `YOU HAVE PLAYED ${minutes} MINUTES`
+                            }
                         })()}
                     </div>
                 </div>

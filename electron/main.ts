@@ -712,6 +712,7 @@ function sendStateUpdate() {
             lastSession: gameData.lastSession || 0,
             history: (gameData.history || []).slice(-50).reverse(),
             displayName: settings.displayName || '',
+            language: settings.language || 'es', // Default to Spanish as requested
             games: gamesList,
             isOnline: isOnline
         })

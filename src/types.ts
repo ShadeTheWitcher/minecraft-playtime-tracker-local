@@ -8,6 +8,7 @@ export interface AppState {
     isPlaying: boolean
     sessionTime: number
     displayName: string
+    language: 'en' | 'es'
     totalTime: number
     lastSession: number
     history: HistoryItem[]

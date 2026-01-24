@@ -23,6 +23,7 @@ function App() {
     isPlaying: false,
     sessionTime: 0,
     totalTime: 0,
+    language: 'es', // Default
     lastSession: 0,
     history: [],
     activeGameId: 'minecraft',
@@ -171,7 +172,7 @@ function App() {
         {viewMode === 'add' ? (
           <AddGameView games={state.games} />
         ) : viewMode === 'settings' ? (
-          <SettingsView userEmail={user?.email} />
+          <SettingsView userEmail={user?.email} currentLanguage={state.language} />
         ) : viewMode === 'edit' && selectedGameMeta ? (
           <EditGameView
             gameId={selectedGameMeta.id}
@@ -192,6 +193,7 @@ function App() {
               history={selectedGameMeta.history || []} // Stored history
               formatTime={formatTime}
               onEdit={() => setViewMode('edit')}
+              language={state.language}
             />
           ) : (
             <div style={{ padding: '20px', color: '#888' }}>

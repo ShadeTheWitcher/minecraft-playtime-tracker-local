@@ -3,11 +3,13 @@ import './SettingsView.css';
 
 interface SettingsViewProps {
     userEmail: string | undefined;
+    currentLanguage: 'en' | 'es';
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ userEmail }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage }) => {
     const [displayName, setDisplayName] = useState('');
     const [autoSync, setAutoSync] = useState(true);
+    const [language, setLanguage] = useState<'en' | 'es'>(currentLanguage);
     const [statusMessage, setStatusMessage] = useState('');
 
     useEffect(() => {
@@ -17,29 +19,35 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail }) => {
             if (settings) {
                 setDisplayName(settings.displayName || '');
                 setAutoSync(settings.autoSync !== undefined ? settings.autoSync : true);
+                setLanguage(settings.language || 'es');
             }
         };
         loadSettings();
     }, []);
 
+    // Also update local state if prop changes (e.g. from main process event)
+    useEffect(() => {
+        setLanguage(currentLanguage);
+    }, [currentLanguage]);
+
     const handleSave = async () => {
-        await window.electronAPI.setSettings({ displayName, autoSync });
-        setStatusMessage('Settings saved!');
+        await window.electronAPI.setSettings({ displayName, autoSync, language });
+        setStatusMessage(language === 'es' ? '¡Configuración guardada!' : 'Settings saved!');
         setTimeout(() => setStatusMessage(''), 3000);
     };
 
     return (
         <div className="settings-container">
-            <h1>Settings</h1>
+            <h1>{language === 'es' ? 'Ajustes' : 'Settings'}</h1>
 
             <div className="settings-section">
-                <h2>Profile</h2>
+                <h2>{language === 'es' ? 'Perfil' : 'Profile'}</h2>
                 <div className="form-group">
                     <label>Email</label>
                     <input type="text" value={userEmail || 'Not logged in'} disabled className="readonly-input" />
                 </div>
                 <div className="form-group">
-                    <label>Display Name</label>
+                    <label>{language === 'es' ? 'Nombre Visible' : 'Display Name'}</label>
                     <input
                         type="text"
                         value={displayName}
@@ -50,7 +58,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail }) => {
             </div>
 
             <div className="settings-section">
-                <h2>Priorities</h2>
+                <h2>{language === 'es' ? 'Preferencias' : 'Preferences'}</h2>
+                <div className="form-group">
+                    <label>{language === 'es' ? 'Idioma' : 'Language'}</label>
+                    <select
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value as 'en' | 'es')}
+                        style={{ padding: '8px', borderRadius: '4px', background: '#333', color: '#fff', border: '1px solid #444', width: '100%' }}
+                    >
+                        <option value="es">Español</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
                 <div className="toggle-group">
                     <label>
                         <input
@@ -58,17 +77,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail }) => {
                             checked={autoSync}
                             onChange={(e) => setAutoSync(e.target.checked)}
                         />
-                        <span className="toggle-label">Auto-Sync Data</span>
+                        <span className="toggle-label">{language === 'es' ? 'Sincronizar Automáticamente' : 'Auto-Sync Data'}</span>
                     </label>
                     <p className="description">
-                        If enabled, your playtime will be automatically uploaded to the cloud when you stop playing.
-                        If disabled, you must manually click "Sync" to upload.
+                        {language === 'es'
+                            ? 'Si se activa, tu tiempo de juego se subirá a la nube al cerrar el juego.'
+                            : 'If enabled, your playtime will be automatically uploaded to the cloud when you stop playing.'}
                     </p>
                 </div>
             </div>
 
             <div className="settings-actions">
-                <button className="save-btn" onClick={handleSave}>Save Changes</button>
+                <button className="save-btn" onClick={handleSave}>{language === 'es' ? 'Guardar Cambios' : 'Save Changes'}</button>
                 {statusMessage && <span className="status-msg">{statusMessage}</span>}
             </div>
         </div>
