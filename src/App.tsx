@@ -46,10 +46,11 @@ function App() {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      if (session?.user && window.ipcRenderer) {
-        window.ipcRenderer.send('auth:user-login', {
-          id: session.user.id,
-          email: session.user.email
+      if (session && window.ipcRenderer) {
+        window.ipcRenderer.send('auth:session', {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          user: session.user
         })
       }
     })
@@ -57,13 +58,14 @@ function App() {
     // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user && window.ipcRenderer) {
-        window.ipcRenderer.send('auth:user-login', {
-          id: session.user.id,
-          email: session.user.email
+      if (session && window.ipcRenderer) {
+        window.ipcRenderer.send('auth:session', {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          user: session.user
         })
-      } else if (!session?.user && window.ipcRenderer) {
-        window.ipcRenderer.send('auth:user-logout')
+      } else if (!session && window.ipcRenderer) {
+        window.ipcRenderer.send('auth:logout')
       }
     })
 

@@ -3,6 +3,7 @@ import path$1 from "path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 import util$2 from "util";
+import { randomUUID } from "crypto";
 import process$1 from "node:process";
 import path from "node:path";
 import { promisify, isDeepStrictEqual } from "node:util";
@@ -28245,6 +28246,8 @@ const store = new ElectronStore({
     gameDefinitions: defaultGames
   }
 });
+store.clear();
+console.log("[Migration] Local store cleared for UUID refactor");
 const mcData = store.get("games.minecraft") || {};
 if (!mcData.history || mcData.history.length === 0) {
   console.log("[DEBUG] Injecting test history for Minecraft");
@@ -28326,23 +28329,41 @@ function createTray() {
   });
 }
 ipcMain$1.on("auth:init", (_event, { url, key }) => {
-  if (url && key && !supabase) {
-    try {
-      supabase = createClient(url, key);
-      console.log("[Auth] Supabase client initialized in Main process");
-    } catch (e) {
-      console.error("[Auth] Failed to init Supabase:", e);
+  if (url && key) {
+    if (!supabase) {
+      try {
+        supabase = createClient(url, key);
+        console.log("[Auth] Supabase client initialized in Main process");
+      } catch (e) {
+        console.error("[Auth] Failed to init Supabase:", e);
+      }
+    }
+  } else {
+    console.warn("[Auth] Received empty Supabase URL or Key via IPC");
+  }
+});
+ipcMain$1.on("auth:session", async (_event, session) => {
+  if (supabase && session) {
+    console.log("[Auth] Received session for:", session.user.email);
+    currentUser = session.user;
+    const { error } = await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
+    });
+    if (error) {
+      console.error("[Auth] Failed to set session in Main:", error);
+    } else {
+      console.log("[Auth] Main process authenticated successfully");
+      await syncWithSupabase();
     }
   }
 });
-ipcMain$1.on("auth:user-login", async (_event, user) => {
-  console.log("[Auth] User logged in:", user.email);
-  currentUser = user;
-  await syncWithSupabase();
-});
-ipcMain$1.on("auth:user-logout", () => {
+ipcMain$1.on("auth:logout", async () => {
   console.log("[Auth] User logged out");
   currentUser = null;
+  if (supabase) {
+    await supabase.auth.signOut();
+  }
 });
 ipcMain$1.on("set-active-game", (_event, gameId) => {
   if (GAMES[gameId]) {
@@ -28396,14 +28417,20 @@ async function checkProcess() {
         if (sessionStartTime) {
           const duration = Date.now() - sessionStartTime;
           const seconds = Math.floor(duration / 1e3);
+          const sessionId = randomUUID();
           const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
           gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds;
           gameData.lastSession = seconds;
           gameData.history = gameData.history || [];
-          gameData.history.push({ date: (/* @__PURE__ */ new Date()).toISOString(), duration: seconds });
+          const sessionEntry = {
+            id: sessionId,
+            date: (/* @__PURE__ */ new Date()).toISOString(),
+            duration: seconds
+          };
+          gameData.history.push(sessionEntry);
           store.set(`games.${activeGameId}`, gameData);
           if (currentUser && supabase) {
-            pushSessionToSupabase(activeGameId, duration, seconds);
+            pushSessionToSupabase(activeGameId, sessionEntry);
           }
           sessionStartTime = null;
           sessionPlaytime = 0;
@@ -28434,7 +28461,7 @@ async function checkProcess() {
     console.error("Error checking processes:", error);
   }
 }
-async function pushSessionToSupabase(gameId, durationMs, seconds) {
+async function pushSessionToSupabase(gameId, session) {
   try {
     if (!currentUser || !supabase) return;
     const { error: gameError } = await supabase.from("games").upsert({
@@ -28446,11 +28473,13 @@ async function pushSessionToSupabase(gameId, durationMs, seconds) {
       console.error("[Sync] Failed to upsert game:", gameError);
       return;
     }
-    const { error: entryError } = await supabase.from("playtime_entries").insert({
+    const { error: entryError } = await supabase.from("playtime_entries").upsert({
+      id: session.id,
+      // Use our local UUID!
       user_id: currentUser.id,
       game_identifier: gameId,
-      start_time: new Date(Date.now() - durationMs).toISOString(),
-      duration: seconds
+      start_time: session.date,
+      duration: session.duration
     });
     if (entryError) console.error("[Sync] Failed to insert entry:", entryError);
     else console.log("[Sync] Session pushed to cloud");
@@ -28458,9 +28487,16 @@ async function pushSessionToSupabase(gameId, durationMs, seconds) {
     console.error("[Sync] Error pushing session:", e);
   }
 }
+let isSyncing = false;
 async function syncWithSupabase() {
   if (!currentUser || !supabase) return;
+  if (isSyncing) {
+    console.log("[Sync] Sync already in progress, skipping.");
+    return;
+  }
+  isSyncing = true;
   console.log("[Sync] Starting full sync...");
+  await pushLocalToSupabase();
   try {
     const { data: dbGames, error: gamesError } = await supabase.from("games").select("*");
     if (gamesError) throw gamesError;
@@ -28499,6 +28535,46 @@ async function syncWithSupabase() {
     sendStateUpdate();
   } catch (e) {
     console.error("[Sync] Failed to sync:", e);
+  }
+}
+async function pushLocalToSupabase() {
+  if (!currentUser || !supabase) return;
+  console.log("[Sync] Starting upstream sync (Local -> Cloud)...");
+  const localGames = store.get("games") || {};
+  for (const [gameId, data] of Object.entries(localGames)) {
+    try {
+      const { error: gameError } = await supabase.from("games").upsert({
+        user_id: currentUser.id,
+        identifier: gameId,
+        name: GAMES[gameId]?.name || gameId
+      }, { onConflict: "user_id, identifier" });
+      if (gameError) {
+        console.error(`[Sync] Failed to upsert game ${gameId}:`, gameError);
+        continue;
+      }
+      const { data: existing, error: fetchError } = await supabase.from("playtime_entries").select("start_time").eq("game_identifier", gameId).eq("user_id", currentUser.id);
+      if (fetchError) {
+        console.error(`[Sync] Failed to fetch existing entries for ${gameId}:`, fetchError);
+        continue;
+      }
+      const existingDates = new Set(existing.map((e) => new Date(e.start_time).toISOString()));
+      const history = data.history || [];
+      const newEntries = history.filter((h) => {
+        return !existingDates.has(h.date);
+      }).map((h) => ({
+        user_id: currentUser.id,
+        game_identifier: gameId,
+        start_time: h.date,
+        duration: h.duration
+      }));
+      if (newEntries.length > 0) {
+        const { error: insertError } = await supabase.from("playtime_entries").insert(newEntries);
+        if (insertError) console.error(`[Sync] Failed to insert batch for ${gameId}:`, insertError);
+        else console.log(`[Sync] Pushed ${newEntries.length} new entries for ${gameId}`);
+      }
+    } catch (e) {
+      console.error(`[Sync] Error syncing game ${gameId}:`, e);
+    }
   }
 }
 function sendStateUpdate() {
@@ -28545,14 +28621,20 @@ app$1.on("before-quit", () => {
   if (isGameRunning && sessionStartTime) {
     const duration = Date.now() - sessionStartTime;
     const seconds = Math.floor(duration / 1e3);
+    const sessionId = randomUUID();
     const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
     gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds;
     gameData.lastSession = seconds;
     gameData.history = gameData.history || [];
-    gameData.history.push({ date: (/* @__PURE__ */ new Date()).toISOString(), duration: seconds });
+    const sessionEntry = {
+      id: sessionId,
+      date: (/* @__PURE__ */ new Date()).toISOString(),
+      duration: seconds
+    };
+    gameData.history.push(sessionEntry);
     store.set(`games.${activeGameId}`, gameData);
     if (currentUser && supabase) {
-      pushSessionToSupabase(activeGameId, duration, seconds);
+      pushSessionToSupabase(activeGameId, sessionEntry);
     }
     console.log(`Saved final session for ${activeGameId}: ${seconds}s`);
   }

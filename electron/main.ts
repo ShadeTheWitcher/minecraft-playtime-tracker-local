@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
 import util from 'util'
+import { randomUUID } from 'crypto'
 import Store from 'electron-store'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
@@ -46,6 +47,11 @@ const store = new Store({
         gameDefinitions: defaultGames
     }
 })
+
+// MIGRATION: Clear store to reset data structure for UUIDs
+// TODO: Remove this after first run
+store.clear()
+console.log('[Migration] Local store cleared for UUID refactor')
 
 // DEBUG: Inject test data if empty
 const mcData = store.get('games.minecraft') as any || {}
@@ -148,26 +154,47 @@ function createTray() {
 
 // IPC Handlers
 ipcMain.on('auth:init', (_event, { url, key }) => {
-    if (url && key && !supabase) {
-        try {
-            supabase = createClient(url, key)
-            console.log('[Auth] Supabase client initialized in Main process')
-        } catch (e) {
-            console.error('[Auth] Failed to init Supabase:', e)
+    if (url && key) {
+        if (!supabase) {
+            try {
+                supabase = createClient(url, key)
+                console.log('[Auth] Supabase client initialized in Main process')
+            } catch (e) {
+                console.error('[Auth] Failed to init Supabase:', e)
+            }
+        }
+    } else {
+        console.warn('[Auth] Received empty Supabase URL or Key via IPC')
+    }
+})
+
+ipcMain.on('auth:session', async (_event, session) => {
+    if (supabase && session) {
+        console.log('[Auth] Received session for:', session.user.email)
+        currentUser = session.user
+
+        // Authenticate the Main Process Client!
+        const { error } = await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token
+        })
+
+        if (error) {
+            console.error('[Auth] Failed to set session in Main:', error)
+        } else {
+            console.log('[Auth] Main process authenticated successfully')
+            // Trigger sync now that we are authenticated
+            await syncWithSupabase()
         }
     }
 })
 
-ipcMain.on('auth:user-login', async (_event, user) => {
-    console.log('[Auth] User logged in:', user.email)
-    currentUser = user
-    // Trigger sync
-    await syncWithSupabase()
-})
-
-ipcMain.on('auth:user-logout', () => {
+ipcMain.on('auth:logout', async () => {
     console.log('[Auth] User logged out')
     currentUser = null
+    if (supabase) {
+        await supabase.auth.signOut()
+    }
 })
 
 ipcMain.on('set-active-game', (_event, gameId: string) => {
@@ -250,17 +277,24 @@ async function checkProcess() {
                     const seconds = Math.floor(duration / 1000)
 
                     // Save data
+                    const sessionId = randomUUID()
                     const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
                     gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
                     gameData.lastSession = seconds
                     gameData.history = gameData.history || []
-                    gameData.history.push({ date: new Date().toISOString(), duration: seconds })
+
+                    const sessionEntry = {
+                        id: sessionId,
+                        date: new Date().toISOString(),
+                        duration: seconds
+                    }
+                    gameData.history.push(sessionEntry)
 
                     store.set(`games.${activeGameId}`, gameData)
 
                     // Sync to Cloud
                     if (currentUser && supabase) {
-                        pushSessionToSupabase(activeGameId, duration, seconds)
+                        pushSessionToSupabase(activeGameId, sessionEntry)
                     }
 
                     sessionStartTime = null
@@ -300,7 +334,7 @@ async function checkProcess() {
     }
 }
 
-async function pushSessionToSupabase(gameId: string, durationMs: number, seconds: number) {
+async function pushSessionToSupabase(gameId: string, session: { id: string, date: string, duration: number }) {
     try {
         if (!currentUser || !supabase) return
 
@@ -319,14 +353,15 @@ async function pushSessionToSupabase(gameId: string, durationMs: number, seconds
             return
         }
 
-        // 2. Insert Playtime Entry
+        // 2. Insert Playtime Entry by ID
         const { error: entryError } = await supabase
             .from('playtime_entries')
-            .insert({
+            .upsert({
+                id: session.id, // Use our local UUID!
                 user_id: currentUser.id,
                 game_identifier: gameId,
-                start_time: new Date(Date.now() - durationMs).toISOString(),
-                duration: seconds
+                start_time: session.date,
+                duration: session.duration
             })
 
         if (entryError) console.error('[Sync] Failed to insert entry:', entryError)
@@ -337,12 +372,22 @@ async function pushSessionToSupabase(gameId: string, durationMs: number, seconds
     }
 }
 
+let isSyncing = false
+
 async function syncWithSupabase() {
     if (!currentUser || !supabase) return
+    if (isSyncing) {
+        console.log('[Sync] Sync already in progress, skipping.')
+        return
+    }
+    isSyncing = true
     console.log('[Sync] Starting full sync...')
 
+    // 1. Push Local -> Cloud (Backfill)
+    await pushLocalToSupabase()
+
     try {
-        // 1. Fetch all games from DB
+        // 2. Fetch all games from DB (Cloud -> Local)
         const { data: dbGames, error: gamesError } = await supabase
             .from('games')
             .select('*')
@@ -415,6 +460,71 @@ async function syncWithSupabase() {
     }
 }
 
+async function pushLocalToSupabase() {
+    if (!currentUser || !supabase) return
+    console.log('[Sync] Starting upstream sync (Local -> Cloud)...')
+
+    const localGames = store.get('games') as Record<string, any> || {}
+
+    for (const [gameId, data] of Object.entries(localGames)) {
+        try {
+            // 1. Upsert Game
+            const { error: gameError } = await supabase
+                .from('games')
+                .upsert({
+                    user_id: currentUser.id,
+                    identifier: gameId,
+                    name: GAMES[gameId]?.name || gameId,
+                }, { onConflict: 'user_id, identifier' })
+
+            if (gameError) {
+                console.error(`[Sync] Failed to upsert game ${gameId}:`, gameError)
+                continue
+            }
+
+            // 2. Sync History
+            // To avoid duplicates, we first fetch existing timestamps for this game
+            const { data: existing, error: fetchError } = await supabase
+                .from('playtime_entries')
+                .select('start_time')
+                .eq('game_identifier', gameId)
+                .eq('user_id', currentUser.id)
+
+            if (fetchError) {
+                console.error(`[Sync] Failed to fetch existing entries for ${gameId}:`, fetchError)
+                continue
+            }
+
+            const existingDates = new Set(existing.map((e: any) => new Date(e.start_time).toISOString()))
+            const history = data.history || []
+
+            const newEntries = history.filter((h: any) => {
+                // Fuzzy match or exact match? Local might be slightly different string format but let's try ISO
+                // Re-serializing to ensure direct string comparison works if they were saved logically
+                return !existingDates.has(h.date)
+            }).map((h: any) => ({
+                user_id: currentUser!.id,
+                game_identifier: gameId,
+                start_time: h.date,
+                duration: h.duration
+            }))
+
+            if (newEntries.length > 0) {
+                // Batch insert
+                const { error: insertError } = await supabase
+                    .from('playtime_entries')
+                    .insert(newEntries)
+
+                if (insertError) console.error(`[Sync] Failed to insert batch for ${gameId}:`, insertError)
+                else console.log(`[Sync] Pushed ${newEntries.length} new entries for ${gameId}`)
+            }
+
+        } catch (e) {
+            console.error(`[Sync] Error syncing game ${gameId}:`, e)
+        }
+    }
+}
+
 function sendStateUpdate() {
     if (win) {
         const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
@@ -469,20 +579,24 @@ app.on('before-quit', () => {
         const duration = Date.now() - sessionStartTime
         const seconds = Math.floor(duration / 1000)
 
+        const sessionId = randomUUID()
         const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
         gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
         gameData.lastSession = seconds
         gameData.history = gameData.history || []
-        gameData.history.push({ date: new Date().toISOString(), duration: seconds })
+
+        const sessionEntry = {
+            id: sessionId,
+            date: new Date().toISOString(),
+            duration: seconds
+        }
+        gameData.history.push(sessionEntry)
 
         store.set(`games.${activeGameId}`, gameData)
 
         // Final Sync
         if (currentUser && supabase) {
-            // Use non-async here or try to await? 
-            // Electron might kill process too fast. 
-            // Best effort.
-            pushSessionToSupabase(activeGameId, duration, seconds)
+            pushSessionToSupabase(activeGameId, sessionEntry)
         }
 
         console.log(`Saved final session for ${activeGameId}: ${seconds}s`)
