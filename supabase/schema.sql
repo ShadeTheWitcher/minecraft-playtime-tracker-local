@@ -72,5 +72,28 @@ create policy "Users can insert their own profile"
 on public.profiles for insert
 with check (auth.uid() = id);
 
--- Trigger to handle new user creation (Optional, but good for auto-profile creation)
--- for now, we'll handle upsert in the app.
+-- 4. Automatic Maintenance
+-- Function to keep only the 30 most recent playtime entries per user
+create or replace function public.delete_old_playtime_entries()
+returns trigger as $$
+begin
+  delete from public.playtime_entries
+  where id in (
+    select id
+    from (
+      select id, 
+             row_number() over (partition by user_id order by created_at desc) as rn
+      from public.playtime_entries
+      where user_id = NEW.user_id
+    ) t
+    where t.rn > 30 -- Delete everything beyond the 30 most recent
+  );
+  return NEW;
+end;
+$$ language plpgsql;
+
+-- Trigger that runs on every insert to playtime_entries
+create trigger trigger_cleanup_old_entries
+after insert on public.playtime_entries
+for each statement
+execute function public.delete_old_playtime_entries();
