@@ -40,28 +40,55 @@ const defaultGames: Record<string, GameConfig> = {
 const store = new Store({
     defaults: {
         activeGameId: 'minecraft',
-        games: {
-            minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
-            hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
+        activeUserId: 'guest',
+        users: {
+            guest: {
+                games: {
+                    minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+                    hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
+                },
+                settings: {
+                    autoSync: true,
+                    displayName: 'Guest'
+                }
+            }
         },
-        gameDefinitions: defaultGames,
-        settings: {
-            autoSync: true,
-            displayName: ''
-        }
+        gameDefinitions: defaultGames
     }
 })
 
-// State
+// MIGRATION: Move root-level 'games' and 'settings' to 'users.guest' if they exist
+// MIGRATION: Move root-level 'games' and 'settings' to 'users.guest' if they exist
+if (store.has('games' as any) && !store.has('users')) {
+    console.log('[Migration] Moving legacy data to guest user...')
+    const oldGames = store.get('games' as any)
+    const oldSettings = store.get('settings' as any)
 
-// State
+    store.set('users.guest.games', oldGames)
+    store.set('users.guest.settings', oldSettings)
+    store.set('activeUserId', 'guest')
+
+    // Clean up roots
+    store.delete('games' as any)
+    store.delete('settings' as any)
+}
 
 // Load definitions into memory
 let GAMES: Record<string, GameConfig> = (store.get('gameDefinitions') as Record<string, GameConfig>) || defaultGames
 
-// Ensure store has them if they were missing (migration)
-if (!store.get('gameDefinitions')) {
-    store.set('gameDefinitions', GAMES)
+// Helpers for User-Scoped Data
+let activeUserId = store.get('activeUserId') as string || 'guest'
+
+function getStorePath(key: string): string {
+    return `users.${activeUserId}.${key}`
+}
+
+function getUserSettings(): any {
+    return store.get(getStorePath('settings')) || { autoSync: true, displayName: '' }
+}
+
+function getUserGames(): Record<string, any> {
+    return store.get(getStorePath('games')) as Record<string, any> || {}
 }
 
 // State
@@ -118,6 +145,43 @@ function createWindow() {
         }
         return false
     })
+}
+
+function setActiveUser(userId: string) {
+    console.log(`[User] Switching context to: ${userId}`)
+    activeUserId = userId
+    store.set('activeUserId', userId)
+
+    // Ensure user bucket exists
+    if (!store.has(`users.${userId}` as any)) {
+        console.log(`[User] Initializing new bucket for ${userId}`)
+
+        let initialGames = {
+            minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+            hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
+        }
+
+        // ADOPTION: If new user, try to copy Guest data if it exists and has playtime
+        if (userId !== 'guest') {
+            const guestGames = store.get('users.guest.games' as any) as any
+            const hasData = guestGames && Object.values(guestGames).some((g: any) => (g.totalPlaytime || 0) > 0)
+
+            if (hasData) {
+                console.log('[User] Adopting Guest data for new user account...')
+                initialGames = JSON.parse(JSON.stringify(guestGames))
+            }
+        }
+
+        store.set(`users.${userId}` as any, {
+            games: initialGames,
+            settings: {
+                autoSync: true,
+                displayName: userId === 'guest' ? 'Guest' : ''
+            }
+        })
+    }
+
+    sendStateUpdate()
 }
 
 function createTray() {
@@ -180,6 +244,10 @@ ipcMain.on('auth:session', async (_event, session) => {
             } else {
                 console.log('[Auth] Main process authenticated successfully')
                 isOnline = true
+
+                // SWITCH TO USER CONTEXT
+                setActiveUser(session.user.id)
+
                 // Trigger sync now that we are authenticated
                 await syncWithSupabase()
             }
@@ -196,6 +264,10 @@ ipcMain.on('auth:session', async (_event, session) => {
 ipcMain.on('auth:logout', async () => {
     console.log('[Auth] User logged out')
     currentUser = null
+
+    // SWITCH TO GUEST CONTEXT
+    setActiveUser('guest')
+
     if (supabase) {
         await supabase.auth.signOut()
     }
@@ -242,21 +314,37 @@ ipcMain.on('add-game', (_event, { name, processName }: { name: string; processNa
 
     // Initialize stats for new game
     const gameStats = { totalPlaytime: 0, lastSession: 0, history: [] }
-    store.set(`games.${id}`, gameStats)
+    // STORE UPDATE: Scoped to user
+    store.set(getStorePath(`games.${id}`), gameStats)
 
     console.log(`[IPC] Game saved: ${name}`)
     sendStateUpdate()
 })
 
 ipcMain.handle('settings:get', () => {
-    return store.get('settings') || {}
+    return getUserSettings()
 })
 
 ipcMain.handle('settings:set', (_event, newSettings) => {
-    const current = store.get('settings') as any || {}
+    // Check if updating displayName, sync to Supabase if logged in
+    const current = getUserSettings()
     const updated = { ...current, ...newSettings }
-    store.set('settings', updated)
+
+    store.set(getStorePath('settings'), updated)
     console.log('[Settings] Updated:', updated)
+
+    // Attempt profile sync
+    // Attempt profile sync
+    if (currentUser && newSettings.displayName && supabase) {
+        supabase.from('profiles').upsert({
+            id: currentUser.id,
+            display_name: newSettings.displayName,
+            updated_at: new Date().toISOString()
+        }).then(({ error }) => {
+            if (error) console.error('[Profile] Failed to sync display name:', error)
+            else console.log('[Profile] Display name synced to Supabase')
+        })
+    }
 })
 
 async function checkProcess() {
@@ -293,7 +381,8 @@ async function checkProcess() {
 
                     // Save data
                     const sessionId = randomUUID()
-                    const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+                    // STORE: Scoped
+                    const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
                     gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
                     gameData.lastSession = seconds
                     gameData.history = gameData.history || []
@@ -306,10 +395,10 @@ async function checkProcess() {
                     }
                     gameData.history.push(sessionEntry)
 
-                    store.set(`games.${activeGameId}`, gameData)
+                    store.set(getStorePath(`games.${activeGameId}`), gameData)
 
                     // Attempt Sync (Check Auto-Sync Preference)
-                    const settings = store.get('settings') as any || { autoSync: true }
+                    const settings = getUserSettings()
                     if (currentUser && supabase && settings.autoSync !== false) {
                         syncWithSupabase()
                     } else if (currentUser && settings.autoSync === false) {
@@ -371,7 +460,9 @@ async function syncWithSupabase() {
     isSyncing = true
     console.log('[Sync] Starting Delta Sync (Total Time Only)...')
 
-    const localGames = store.get('games') as Record<string, any> || {}
+    console.log('[Sync] Starting Delta Sync (Total Time Only)...')
+
+    const localGames = getUserGames()
 
     for (const [gameId, data] of Object.entries(localGames)) {
         try {
@@ -442,7 +533,7 @@ async function syncWithSupabase() {
 
                     // Mark as synced locally
                     unsyncedSessions.forEach((h: any) => h.synced = true)
-                    store.set(`games.${gameId}`, data)
+                    store.set(getStorePath(`games.${gameId}`), data)
 
                     // Update our view of remoteTotal to avoid double-add or confusion below
                     remoteTotal = newTotal
@@ -459,7 +550,7 @@ async function syncWithSupabase() {
                 data.totalPlaytime = remoteTotal
                 // Optional: Update last session if remote seems newer? 
                 // Hard to know "when" remote happened without timestamps, but total time is what matters most.
-                store.set(`games.${gameId}`, data)
+                store.set(getStorePath(`games.${gameId}`), data)
             }
 
             // 5. PULL HISTORY: Fetch recent sessions (Cross-device sync)
@@ -495,7 +586,7 @@ async function syncWithSupabase() {
                     // Re-sort
                     data.history = localHistory.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
                     // Limit local history too? optional. Let's keep it growing for now unless it gets huge.
-                    store.set(`games.${gameId}`, data)
+                    store.set(getStorePath(`games.${gameId}`), data)
                 }
             }
 
@@ -512,10 +603,11 @@ async function syncWithSupabase() {
 
 function sendStateUpdate() {
     if (win) {
-        const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+        // STORE: Scoped
+        const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
 
         const gamesList = Object.values(GAMES).map(g => {
-            const gData = store.get(`games.${g.id}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+            const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
             return {
                 id: g.id,
                 name: g.name,
@@ -566,7 +658,7 @@ app.on('before-quit', () => {
         const seconds = Math.floor(duration / 1000)
 
         const sessionId = randomUUID()
-        const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+        const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
         gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
         gameData.lastSession = seconds
         gameData.history = gameData.history || []
@@ -579,7 +671,7 @@ app.on('before-quit', () => {
         }
         gameData.history.push(sessionEntry)
 
-        store.set(`games.${activeGameId}`, gameData)
+        store.set(getStorePath(`games.${activeGameId}`), gameData)
 
         // Final Sync (Fire and forget-ish, but syncWithSupabase is async)
         if (currentUser && supabase) {
