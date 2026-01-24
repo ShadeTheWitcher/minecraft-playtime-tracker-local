@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './Sidebar.css'
 import ConfirmationModal from './ConfirmationModal';
 
@@ -14,6 +14,8 @@ interface SidebarProps {
     onSettings: () => void;
     userEmail: string | null;
     displayName: string;
+    isOnline?: boolean;
+    isConfigured?: boolean;
 }
 
 export function Sidebar({
@@ -28,8 +30,9 @@ export function Sidebar({
     onSettings,
     userEmail,
     displayName,
-    isOnline = true
-}: SidebarProps & { isOnline?: boolean }) {
+    isOnline = true,
+    isConfigured = true
+}: SidebarProps) {
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     const handleLogoutClick = () => {
@@ -100,8 +103,13 @@ export function Sidebar({
                             </div>
                         </div>
                     ) : (
-                        <button className="login-btn" onClick={onLogin}>
-                            LOGIN / SYNC
+                        <button
+                            className={`login-btn ${!isConfigured ? 'disabled' : ''}`}
+                            onClick={isConfigured ? onLogin : undefined}
+                            title={!isConfigured ? "Setup .env details to enable sync" : "Login/Sync"}
+                            style={!isConfigured ? { opacity: 0.5, cursor: 'not-allowed', backgroundColor: '#555' } : {}}
+                        >
+                            {!isConfigured ? "SETUP REQUIRED" : "LOGIN / SYNC"}
                         </button>
                     )}
                 </div>
