@@ -62,3 +62,15 @@ body {
   text-transform: uppercase;
   text-shadow: 2px 2px 0 #000;
 }
+
+.brand-watermark {
+  position: fixed;
+  bottom: 15px;
+  right: 20px;
+  font-size: 0.55rem;
+  color: #fff;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 9999;
+  letter-spacing: 0.5px;
+}

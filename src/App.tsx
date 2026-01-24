@@ -204,6 +204,9 @@ function App() {
           )
         )}
       </main>
+      <div className="brand-watermark">
+        createdBy ShadeTheWitcher
+      </div>
     </div>
   )
 }
