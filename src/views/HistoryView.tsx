@@ -4,12 +4,13 @@ import type { HistoryItem } from '../types'
 interface HistoryViewProps {
     history: HistoryItem[];
     formatTime: (seconds: number) => string;
+    gameName: string;
 }
 
-export function HistoryView({ history, formatTime }: HistoryViewProps) {
+export function HistoryView({ history, formatTime, gameName }: HistoryViewProps) {
     return (
         <div className="pixel-card" style={{ width: '100%', maxHeight: '400px', overflowY: 'auto' }}>
-            <h2 className="title" style={{ fontSize: '1rem', marginBottom: '1rem' }}>Last Sessions</h2>
+            <h2 className="title" style={{ fontSize: '1rem', marginBottom: '1rem' }}>{gameName} History</h2>
 
             {history.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>

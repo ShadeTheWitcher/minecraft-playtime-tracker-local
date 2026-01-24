@@ -64,7 +64,7 @@ function App() {
       )}
 
       {activeTab === 'history' && (
-        <HistoryView history={state.history} formatTime={formatTime} />
+        <HistoryView history={state.history} formatTime={formatTime} gameName={state.gameName} />
       )}
     </div>
   )
