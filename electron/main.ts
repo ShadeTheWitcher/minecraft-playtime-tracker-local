@@ -383,6 +383,24 @@ async function syncWithSupabase() {
                 } else {
                     console.log(`[Sync] Pushed +${deltaSeconds}s to ${gameId}. New Remote Total: ${newTotal}`)
 
+                    // 3b. NEW: Sync History (Batch Push)
+                    const entriesToPush = unsyncedSessions.map((h: any) => ({
+                        id: h.id, // Local UUID
+                        user_id: currentUser!.id,
+                        game_identifier: gameId,
+                        start_time: h.date,
+                        duration: h.duration
+                    }))
+
+                    if (entriesToPush.length > 0) {
+                        const { error: historyError } = await supabase
+                            .from('playtime_entries')
+                            .upsert(entriesToPush, { onConflict: 'id' })
+
+                        if (historyError) console.error(`[Sync] Failed to push history for ${gameId}:`, historyError)
+                        else console.log(`[Sync] Pushed ${entriesToPush.length} history entries for ${gameId}`)
+                    }
+
                     // Mark as synced locally
                     unsyncedSessions.forEach((h: any) => h.synced = true)
                     store.set(`games.${gameId}`, data)
@@ -405,13 +423,51 @@ async function syncWithSupabase() {
                 store.set(`games.${gameId}`, data)
             }
 
+            // 5. PULL HISTORY: Fetch recent sessions (Cross-device sync)
+            // Limit to last 50 to keep it lightweight as requested.
+            const { data: recentHistory, error: recentError } = await supabase
+                .from('playtime_entries')
+                .select('*')
+                .eq('game_identifier', gameId)
+                .order('start_time', { ascending: false })
+                .limit(50)
+
+            if (!recentError && recentHistory && recentHistory.length > 0) {
+                const localHistory = data.history || []
+                const localIds = new Set(localHistory.map((h: any) => h.id))
+                let addedCount = 0
+
+                // Merge (Remote -> Local)
+                for (const remote of recentHistory) {
+                    if (!localIds.has(remote.id)) {
+                        localHistory.push({
+                            id: remote.id,
+                            date: remote.start_time,
+                            duration: remote.duration,
+                            synced: true // Coming from cloud, so it is synced
+                        })
+                        localIds.add(remote.id)
+                        addedCount++
+                    }
+                }
+
+                if (addedCount > 0) {
+                    console.log(`[Sync] Downloaded ${addedCount} recent sessions for ${gameId}`)
+                    // Re-sort
+                    data.history = localHistory.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                    // Limit local history too? optional. Let's keep it growing for now unless it gets huge.
+                    store.set(`games.${gameId}`, data)
+                }
+            }
+
+
         } catch (e) {
             console.error(`[Sync] Error processing ${gameId}:`, e)
         }
     }
 
     isSyncing = false
-    console.log('[Sync] Delta Sync complete')
+    console.log('[Sync] Hybrid Sync complete (Delta + History)')
     sendStateUpdate()
 }
 

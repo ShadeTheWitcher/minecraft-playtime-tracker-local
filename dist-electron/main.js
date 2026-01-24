@@ -495,7 +495,7 @@ if (!IS_WINDOWS) {
 if (IS_LINUX) {
   Signals.push("SIGIO", "SIGPOLL", "SIGPWR", "SIGSTKFLT");
 }
-let Interceptor$1 = class Interceptor {
+class Interceptor {
   /* CONSTRUCTOR */
   constructor() {
     this.callbacks = /* @__PURE__ */ new Set();
@@ -532,9 +532,9 @@ let Interceptor$1 = class Interceptor {
     };
     this.hook();
   }
-};
-const Interceptor2 = new Interceptor$1();
-const whenExit = Interceptor2.register;
+}
+const Interceptor$1 = new Interceptor();
+const whenExit = Interceptor$1.register;
 const Temp = {
   /* VARIABLES */
   store: {},
@@ -28493,6 +28493,19 @@ async function syncWithSupabase() {
           console.error(`[Sync] Failed to push update for ${gameId}:`, upsertError);
         } else {
           console.log(`[Sync] Pushed +${deltaSeconds}s to ${gameId}. New Remote Total: ${newTotal}`);
+          const entriesToPush = unsyncedSessions.map((h) => ({
+            id: h.id,
+            // Local UUID
+            user_id: currentUser.id,
+            game_identifier: gameId,
+            start_time: h.date,
+            duration: h.duration
+          }));
+          if (entriesToPush.length > 0) {
+            const { error: historyError } = await supabase.from("playtime_entries").upsert(entriesToPush, { onConflict: "id" });
+            if (historyError) console.error(`[Sync] Failed to push history for ${gameId}:`, historyError);
+            else console.log(`[Sync] Pushed ${entriesToPush.length} history entries for ${gameId}`);
+          }
           unsyncedSessions.forEach((h) => h.synced = true);
           store.set(`games.${gameId}`, data);
           remoteTotal = newTotal;
@@ -28503,12 +28516,36 @@ async function syncWithSupabase() {
         data.totalPlaytime = remoteTotal;
         store.set(`games.${gameId}`, data);
       }
+      const { data: recentHistory, error: recentError } = await supabase.from("playtime_entries").select("*").eq("game_identifier", gameId).order("start_time", { ascending: false }).limit(50);
+      if (!recentError && recentHistory && recentHistory.length > 0) {
+        const localHistory = data.history || [];
+        const localIds = new Set(localHistory.map((h) => h.id));
+        let addedCount = 0;
+        for (const remote of recentHistory) {
+          if (!localIds.has(remote.id)) {
+            localHistory.push({
+              id: remote.id,
+              date: remote.start_time,
+              duration: remote.duration,
+              synced: true
+              // Coming from cloud, so it is synced
+            });
+            localIds.add(remote.id);
+            addedCount++;
+          }
+        }
+        if (addedCount > 0) {
+          console.log(`[Sync] Downloaded ${addedCount} recent sessions for ${gameId}`);
+          data.history = localHistory.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          store.set(`games.${gameId}`, data);
+        }
+      }
     } catch (e) {
       console.error(`[Sync] Error processing ${gameId}:`, e);
     }
   }
   isSyncing = false;
-  console.log("[Sync] Delta Sync complete");
+  console.log("[Sync] Hybrid Sync complete (Delta + History)");
   sendStateUpdate();
 }
 function sendStateUpdate() {
