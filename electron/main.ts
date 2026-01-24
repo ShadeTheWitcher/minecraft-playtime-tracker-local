@@ -48,24 +48,7 @@ const store = new Store({
     }
 })
 
-// MIGRATION: Clear store to reset data structure for UUIDs
-// TODO: Remove this after first run
-store.clear()
-console.log('[Migration] Local store cleared for UUID refactor')
-
-// DEBUG: Inject test data if empty
-const mcData = store.get('games.minecraft') as any || {}
-if (!mcData.history || mcData.history.length === 0) {
-    console.log('[DEBUG] Injecting test history for Minecraft')
-    store.set('games.minecraft', {
-        totalPlaytime: 120,
-        lastSession: 60,
-        history: [
-            { date: new Date().toISOString(), duration: 60 },
-            { date: new Date(Date.now() - 86400000).toISOString(), duration: 60 }
-        ]
-    })
-}
+// State
 
 // State
 
@@ -286,15 +269,16 @@ async function checkProcess() {
                     const sessionEntry = {
                         id: sessionId,
                         date: new Date().toISOString(),
-                        duration: seconds
+                        duration: seconds,
+                        synced: false // Delta Sync Flag
                     }
                     gameData.history.push(sessionEntry)
 
                     store.set(`games.${activeGameId}`, gameData)
 
-                    // Sync to Cloud
+                    // Attempt Sync
                     if (currentUser && supabase) {
-                        pushSessionToSupabase(activeGameId, sessionEntry)
+                        syncWithSupabase()
                     }
 
                     sessionStartTime = null
@@ -334,195 +318,101 @@ async function checkProcess() {
     }
 }
 
-async function pushSessionToSupabase(gameId: string, session: { id: string, date: string, duration: number }) {
-    try {
-        if (!currentUser || !supabase) return
-
-        // 1. Ensure game exists in DB
-        const { error: gameError } = await supabase
-            .from('games')
-            .upsert({
-                user_id: currentUser.id,
-                identifier: gameId,
-                name: GAMES[gameId]?.name || gameId,
-            }, { onConflict: 'user_id, identifier' })
-            .select()
-
-        if (gameError) {
-            console.error('[Sync] Failed to upsert game:', gameError)
-            return
-        }
-
-        // 2. Insert Playtime Entry by ID
-        const { error: entryError } = await supabase
-            .from('playtime_entries')
-            .upsert({
-                id: session.id, // Use our local UUID!
-                user_id: currentUser.id,
-                game_identifier: gameId,
-                start_time: session.date,
-                duration: session.duration
-            })
-
-        if (entryError) console.error('[Sync] Failed to insert entry:', entryError)
-        else console.log('[Sync] Session pushed to cloud')
-
-    } catch (e) {
-        console.error('[Sync] Error pushing session:', e)
-    }
-}
-
 let isSyncing = false
 
 async function syncWithSupabase() {
-    if (!currentUser || !supabase) return
+    if (!currentUser) {
+        console.log('[Sync] Skipped: No authenticated user. Please Login.')
+        return
+    }
+    if (!supabase) {
+        console.log('[Sync] Skipped: Supabase client not initialized.')
+        return
+    }
     if (isSyncing) {
         console.log('[Sync] Sync already in progress, skipping.')
         return
     }
     isSyncing = true
-    console.log('[Sync] Starting full sync...')
-
-    // 1. Push Local -> Cloud (Backfill)
-    await pushLocalToSupabase()
-
-    try {
-        // 2. Fetch all games from DB (Cloud -> Local)
-        const { data: dbGames, error: gamesError } = await supabase
-            .from('games')
-            .select('*')
-
-        if (gamesError) throw gamesError
-
-        // 2. For each game, fetch history (playtime_entries)
-        for (const dbGame of (dbGames || [])) {
-            const gameId = dbGame.identifier
-
-            // Ensure local definition exists
-            if (!GAMES[gameId]) {
-                GAMES[gameId] = {
-                    id: gameId,
-                    name: dbGame.name,
-                    processNames: [] // We don't know the process name from DB!
-                    // TODO: Store process names in DB? For now, user has to re-add manually to recover tracking
-                }
-                store.set('gameDefinitions', GAMES)
-            }
-
-            // Fetch entries
-            const { data: entries, error: entriesError } = await supabase
-                .from('playtime_entries')
-                .select('*')
-                .eq('game_identifier', gameId)
-                .order('start_time', { ascending: true })
-
-            if (entriesError) throw entriesError
-
-            // Merge with local history
-            const localData = store.get(`games.${gameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
-
-            // Map remote entries to local format
-            const remoteHistory = entries.map((e: any) => ({
-                date: e.start_time,
-                duration: e.duration
-            }))
-
-            // Simple merge: Combine and remove exact duplicates (by time string)
-            // A better approach would be to trust Remote as source of truth for past events?
-            // Let's union them.
-
-            const uniqueHistory = [...localData.history]
-            const localDates = new Set(uniqueHistory.map((h: any) => h.date))
-
-            for (const remote of remoteHistory) {
-                // If we don't have this exact timestamp locally, add it
-                // Note: ISO strings might differ slightly if generated differently. 
-                // But generally safe-ish for this simple app.
-                if (!localDates.has(remote.date)) {
-                    uniqueHistory.push(remote)
-                }
-            }
-
-            // Update Total Time
-            const newTotal = uniqueHistory.reduce((acc: number, cur: any) => acc + cur.duration, 0)
-
-            localData.history = uniqueHistory.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-            localData.totalPlaytime = newTotal
-
-            store.set(`games.${gameId}`, localData)
-        }
-
-        console.log('[Sync] Sync complete')
-        sendStateUpdate()
-
-    } catch (e) {
-        console.error('[Sync] Failed to sync:', e)
-    }
-}
-
-async function pushLocalToSupabase() {
-    if (!currentUser || !supabase) return
-    console.log('[Sync] Starting upstream sync (Local -> Cloud)...')
+    console.log('[Sync] Starting Delta Sync (Total Time Only)...')
 
     const localGames = store.get('games') as Record<string, any> || {}
 
     for (const [gameId, data] of Object.entries(localGames)) {
         try {
-            // 1. Upsert Game
-            const { error: gameError } = await supabase
-                .from('games')
-                .upsert({
-                    user_id: currentUser.id,
-                    identifier: gameId,
-                    name: GAMES[gameId]?.name || gameId,
-                }, { onConflict: 'user_id, identifier' })
-
-            if (gameError) {
-                console.error(`[Sync] Failed to upsert game ${gameId}:`, gameError)
-                continue
-            }
-
-            // 2. Sync History
-            // To avoid duplicates, we first fetch existing timestamps for this game
-            const { data: existing, error: fetchError } = await supabase
-                .from('playtime_entries')
-                .select('start_time')
-                .eq('game_identifier', gameId)
-                .eq('user_id', currentUser.id)
-
-            if (fetchError) {
-                console.error(`[Sync] Failed to fetch existing entries for ${gameId}:`, fetchError)
-                continue
-            }
-
-            const existingDates = new Set(existing.map((e: any) => new Date(e.start_time).toISOString()))
+            // 1. Calculate Local Delta (Unsynced Time)
             const history = data.history || []
+            // Fix: Check for !h.synced to catch both FALSE and UNDEFINED (legacy data)
+            const unsyncedSessions = history.filter((h: any) => !h.synced)
+            const deltaSeconds = unsyncedSessions.reduce((acc: number, curr: any) => acc + curr.duration, 0)
 
-            const newEntries = history.filter((h: any) => {
-                // Fuzzy match or exact match? Local might be slightly different string format but let's try ISO
-                // Re-serializing to ensure direct string comparison works if they were saved logically
-                return !existingDates.has(h.date)
-            }).map((h: any) => ({
-                user_id: currentUser!.id,
-                game_identifier: gameId,
-                start_time: h.date,
-                duration: h.duration
-            }))
+            console.log(`[Sync] ${gameId}: Found ${unsyncedSessions.length} unsynced sessions. Delta: +${deltaSeconds}s`)
 
-            if (newEntries.length > 0) {
-                // Batch insert
-                const { error: insertError } = await supabase
-                    .from('playtime_entries')
-                    .insert(newEntries)
+            // 2. Fetch Remote State
+            const { data: remoteGame, error: fetchError } = await supabase
+                .from('games')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .eq('identifier', gameId)
+                .single()
 
-                if (insertError) console.error(`[Sync] Failed to insert batch for ${gameId}:`, insertError)
-                else console.log(`[Sync] Pushed ${newEntries.length} new entries for ${gameId}`)
+            if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = Not found
+                console.error(`[Sync] Failed to fetch ${gameId}:`, fetchError)
+                continue
+            }
+
+            let remoteTotal = remoteGame?.total_time || 0
+            const remoteLastSession = remoteGame?.last_session || 0
+
+            // 3. PUSH: If we have new data, update Remote
+            if (deltaSeconds > 0) {
+                const newTotal = remoteTotal + deltaSeconds
+
+                const { error: upsertError } = await supabase
+                    .from('games')
+                    .upsert({
+                        user_id: currentUser.id,
+                        identifier: gameId,
+                        name: GAMES[gameId]?.name || gameId,
+                        total_time: newTotal,
+                        last_session: data.lastSession // Update last session to latest local
+                    }, { onConflict: 'user_id, identifier' })
+
+                if (upsertError) {
+                    console.error(`[Sync] Failed to push update for ${gameId}:`, upsertError)
+                } else {
+                    console.log(`[Sync] Pushed +${deltaSeconds}s to ${gameId}. New Remote Total: ${newTotal}`)
+
+                    // Mark as synced locally
+                    unsyncedSessions.forEach((h: any) => h.synced = true)
+                    store.set(`games.${gameId}`, data)
+
+                    // Update our view of remoteTotal to avoid double-add or confusion below
+                    remoteTotal = newTotal
+                }
+            }
+
+            // 4. PULL: If Remote is somehow ahead (played on another PC), update Local Total
+            // Logic: Trust the larger total.
+            // CAUTION: If we just pushed, remoteTotal IS equal to local total (conceptually).
+            // But if we came in with 0 delta, and remote has 1000, and we have 500, we promote to 1000.
+
+            if (remoteTotal > data.totalPlaytime) {
+                console.log(`[Sync] Remote (${remoteTotal}) > Local (${data.totalPlaytime}). Updating Local.`)
+                data.totalPlaytime = remoteTotal
+                // Optional: Update last session if remote seems newer? 
+                // Hard to know "when" remote happened without timestamps, but total time is what matters most.
+                store.set(`games.${gameId}`, data)
             }
 
         } catch (e) {
-            console.error(`[Sync] Error syncing game ${gameId}:`, e)
+            console.error(`[Sync] Error processing ${gameId}:`, e)
         }
     }
+
+    isSyncing = false
+    console.log('[Sync] Delta Sync complete')
+    sendStateUpdate()
 }
 
 function sendStateUpdate() {
@@ -588,15 +478,16 @@ app.on('before-quit', () => {
         const sessionEntry = {
             id: sessionId,
             date: new Date().toISOString(),
-            duration: seconds
+            duration: seconds,
+            synced: false
         }
         gameData.history.push(sessionEntry)
 
         store.set(`games.${activeGameId}`, gameData)
 
-        // Final Sync
+        // Final Sync (Fire and forget-ish, but syncWithSupabase is async)
         if (currentUser && supabase) {
-            pushSessionToSupabase(activeGameId, sessionEntry)
+            syncWithSupabase()
         }
 
         console.log(`Saved final session for ${activeGameId}: ${seconds}s`)
