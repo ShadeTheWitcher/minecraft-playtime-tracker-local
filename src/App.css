@@ -1,84 +1,76 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 :root {
-  --bg-color: #2c2c2c;
-  --text-color: #ffffff;
-  --accent-color: #55aa55; /* Minecraft Green */
-  --inactive-color: #aa5555; /* Red */
-  --pixel-bg: #1a1a1a;
+  --bg-color: #202020;
+  --panel-bg: #2a2a2a;
+  --text-color: #dcdcdc;
+  --accent-blue: #5b6ee1;
+  --accent-green: #4cd964;
+  --border-color: #000;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  /* Reset padding */
+  width: 100vw;
+  height: 100vh;
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: 'Press Start 2P', cursive;
-  overflow: hidden; /* No scrollbars for app */
+  overflow: hidden;
 }
 
-.container {
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* New Main Layout */
+.app-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.main-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background-color: var(--bg-color);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 2rem;
-  text-align: center;
+  gap: 20px;
+}
+
+/* Reusable Pixel Card */
+.pixel-card {
+  background-color: #333;
+  padding: 1.5rem;
+  box-shadow:
+    -4px 0 0 0 #000,
+    4px 0 0 0 #000,
+    0 -4px 0 0 #000,
+    0 4px 0 0 #000;
+  margin: 4px;
 }
 
 .title {
-  font-size: 1.5rem;
-  margin-bottom: 2rem;
-  color: #ddd;
-  text-shadow: 4px 4px 0px #000;
-}
-
-.status-box {
-  padding: 1rem 2rem;
-  border: 4px solid #000;
-  background-color: var(--pixel-bg);
-  margin-bottom: 2rem;
-  box-shadow: 8px 8px 0px #000;
-  font-size: 1.2rem;
-}
-
-.status-box.active {
-  color: var(--accent-color);
-  border-color: var(--accent-color);
-}
-
-.status-box.inactive {
-  color: var(--inactive-color);
-}
-
-.timer-section {
-  margin-bottom: 1.5rem;
-}
-
-.timer-section h2 {
-  font-size: 0.8rem;
-  margin-bottom: 0.5rem;
-  opacity: 0.8;
-}
-
-.timer {
-  background: var(--pixel-bg);
-  border: 4px solid #444;
-  padding: 10px;
-  box-shadow: 4px 4px 0px #000;
-}
-
-.big-text {
-  font-size: 2rem;
+  font-size: 1rem;
   color: #fff;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #000;
 }
 
-.small-text {
-  font-size: 1.2rem;
-  color: #aaa;
+.brand-watermark {
+  position: fixed;
+  bottom: 15px;
+  right: 20px;
+  font-size: 0.55rem;
+  color: #fff;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 9999;
+  letter-spacing: 0.5px;
 }
-

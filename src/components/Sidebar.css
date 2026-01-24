@@ -1,0 +1,174 @@
+.sidebar {
+    width: 250px;
+    background-color: #1e1e1e;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    border-right: 1px solid #333;
+}
+
+.sidebar-header {
+    padding: 20px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #888;
+    letter-spacing: 1px;
+}
+
+.game-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.game-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #ccc;
+    font-weight: 500;
+}
+
+.game-item:hover {
+    background-color: #2a2a2a;
+    color: white;
+}
+
+.game-item.selected {
+    background-color: #333;
+    color: white;
+    border-left: 3px solid #4caf50;
+}
+
+.running-indicator {
+    font-size: 0.6rem;
+    background-color: #4caf50;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.sidebar-actions {
+    padding: 20px;
+}
+
+.add-game-btn {
+    width: 100%;
+    background-color: transparent;
+    border: 1px dashed #555;
+    color: #888;
+    padding: 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.add-game-btn:hover {
+    border-color: #888;
+    color: white;
+    background-color: #252525;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    background-color: #1a1a1a;
+    border-top: 1px solid #333;
+}
+
+.login-btn {
+    width: 100%;
+    background-color: #4caf50;
+    /* Green */
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.login-btn:hover {
+    background-color: #43a047;
+}
+
+/* User Profile Styles */
+.user-profile {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.avatar {
+    width: 36px;
+    height: 36px;
+    background-color: #555;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.display-name {
+    color: white;
+    font-weight: 500;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-status {
+    color: #4caf50;
+    font-size: 0.7rem;
+}
+
+.profile-controls {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    /* Right align buttons */
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-btn:hover {
+    background-color: #333;
+    color: white;
+}
+
+.logout-btn:hover {
+    color: #ef5350;
+    /* Red hover for logout */
+    background-color: #3e2020;
+}

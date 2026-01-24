@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.91.1",
     "ps-list": "^9.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -34,5 +35,21 @@
     "vite": "^7.2.4",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "com.shadethewitcher.minecrafttracker",
+    "productName": "Minecraft Playtime Tracker",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "public/app_icon.png"
+    },
+    "cscLink": null,
+    "files": [
+      "dist",
+      "dist-electron"
+    ]
   }
 }
