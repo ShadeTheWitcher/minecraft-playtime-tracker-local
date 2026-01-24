@@ -3,7 +3,6 @@ import './App.css'
 import { Navbar } from './components/Navbar'
 import { DashboardView } from './views/DashboardView'
 import { HistoryView } from './views/HistoryView'
-import { GameSelectorView } from './views/GameSelectorView'
 import type { AppState } from './types'
 
 function formatTime(seconds: number) {
@@ -23,14 +22,12 @@ function App() {
     activeGameId: 'minecraft',
     gameName: 'Minecraft'
   })
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'games'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'history'>('dashboard')
 
   useEffect(() => {
     // Safety check for IPC
     if (!window.ipcRenderer) {
       console.warn('ipcRenderer Not Found - Running in Offline/Browser Mode');
-      // Do not return here, allow render to proceed in offline mode
-      // or set a flag to show an error message in the UI
     }
 
     if (window.ipcRenderer) {
@@ -55,12 +52,6 @@ function App() {
     }
   }, [])
 
-  const handleGameSelect = (gameId: string) => {
-    if (window.ipcRenderer) {
-      window.ipcRenderer.send('set-active-game', gameId)
-    }
-  }
-
   // Pre-render check to ensure components don't crash on mounting
   if (!state) return <div>Loading State...</div>
 
@@ -74,13 +65,6 @@ function App() {
 
       {activeTab === 'history' && (
         <HistoryView history={state.history} formatTime={formatTime} />
-      )}
-
-      {activeTab === 'games' && (
-        <GameSelectorView
-          activeGameId={state.activeGameId}
-          onSelectGame={handleGameSelect}
-        />
       )}
     </div>
   )

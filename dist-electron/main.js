@@ -16179,31 +16179,44 @@ async function checkProcess() {
       return "";
     }).filter((p) => p);
     const uniqueNames = new Set(processes);
-    const currentGame = GAMES[activeGameId];
-    if (!currentGame) return;
-    const found = currentGame.processNames.some((name) => uniqueNames.has(name));
-    if (found && !isGameRunning) {
-      isGameRunning = true;
-      sessionStartTime = Date.now();
-      console.log(`${currentGame.name} started`);
-    } else if (!found && isGameRunning) {
-      isGameRunning = false;
-      if (sessionStartTime) {
-        const duration = Date.now() - sessionStartTime;
-        const seconds = Math.floor(duration / 1e3);
-        const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
-        gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds;
-        gameData.lastSession = seconds;
-        gameData.history = gameData.history || [];
-        gameData.history.push({ date: (/* @__PURE__ */ new Date()).toISOString(), duration: seconds });
-        store.set(`games.${activeGameId}`, gameData);
-        sessionStartTime = null;
-        sessionPlaytime = 0;
-        console.log(`${currentGame.name} stopped. Session: ${seconds}s`);
+    if (isGameRunning) {
+      const currentGame = GAMES[activeGameId];
+      if (!currentGame) return;
+      const found = currentGame.processNames.some((name) => uniqueNames.has(name));
+      if (!found) {
+        isGameRunning = false;
+        if (sessionStartTime) {
+          const duration = Date.now() - sessionStartTime;
+          const seconds = Math.floor(duration / 1e3);
+          const gameData = store.get(`games.${activeGameId}`) || { totalPlaytime: 0, lastSession: 0, history: [] };
+          gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds;
+          gameData.lastSession = seconds;
+          gameData.history = gameData.history || [];
+          gameData.history.push({ date: (/* @__PURE__ */ new Date()).toISOString(), duration: seconds });
+          store.set(`games.${activeGameId}`, gameData);
+          sessionStartTime = null;
+          sessionPlaytime = 0;
+          console.log(`${currentGame.name} stopped. Session: ${seconds}s`);
+        }
+      } else {
+        if (sessionStartTime) {
+          sessionPlaytime = Math.floor((Date.now() - sessionStartTime) / 1e3);
+        }
       }
-    }
-    if (isGameRunning && sessionStartTime) {
-      sessionPlaytime = Math.floor((Date.now() - sessionStartTime) / 1e3);
+    } else {
+      for (const gameId in GAMES) {
+        const game = GAMES[gameId];
+        const found = game.processNames.some((name) => uniqueNames.has(name));
+        if (found) {
+          activeGameId = gameId;
+          store.set("activeGameId", gameId);
+          isGameRunning = true;
+          sessionStartTime = Date.now();
+          sessionPlaytime = 0;
+          console.log(`${game.name} started (Auto-Detected)`);
+          break;
+        }
+      }
     }
     sendStateUpdate();
   } catch (error) {

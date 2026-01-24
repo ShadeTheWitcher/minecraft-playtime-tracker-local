@@ -147,43 +147,61 @@ async function checkProcess() {
             .filter((p: string) => p)
 
         const uniqueNames = new Set(processes)
-        const currentGame = GAMES[activeGameId]
 
-        // Safety check if game config exists
-        if (!currentGame) return
+        // Logic:
+        // 1. If game IS running, check ONLY that game to see if it stopped.
+        // 2. If game IS NOT running, check ALL games to see if one started.
 
-        const found = currentGame.processNames.some(name => uniqueNames.has(name))
+        if (isGameRunning) {
+            const currentGame = GAMES[activeGameId]
+            if (!currentGame) return
 
-        if (found && !isGameRunning) {
-            // Game started
-            isGameRunning = true
-            sessionStartTime = Date.now()
-            console.log(`${currentGame.name} started`)
-        } else if (!found && isGameRunning) {
-            // Game stopped
-            isGameRunning = false
-            if (sessionStartTime) {
-                const duration = Date.now() - sessionStartTime
-                const seconds = Math.floor(duration / 1000)
+            const found = currentGame.processNames.some(name => uniqueNames.has(name))
 
-                // Save data per game
-                const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+            if (!found) {
+                // Game stopped
+                isGameRunning = false
+                if (sessionStartTime) {
+                    const duration = Date.now() - sessionStartTime
+                    const seconds = Math.floor(duration / 1000)
 
-                gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
-                gameData.lastSession = seconds
-                gameData.history = gameData.history || []
-                gameData.history.push({ date: new Date().toISOString(), duration: seconds })
+                    // Save data
+                    const gameData = store.get(`games.${activeGameId}`) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+                    gameData.totalPlaytime = (gameData.totalPlaytime || 0) + seconds
+                    gameData.lastSession = seconds
+                    gameData.history = gameData.history || []
+                    gameData.history.push({ date: new Date().toISOString(), duration: seconds })
 
-                store.set(`games.${activeGameId}`, gameData)
+                    store.set(`games.${activeGameId}`, gameData)
 
-                sessionStartTime = null
-                sessionPlaytime = 0
-                console.log(`${currentGame.name} stopped. Session: ${seconds}s`)
+                    sessionStartTime = null
+                    sessionPlaytime = 0
+                    console.log(`${currentGame.name} stopped. Session: ${seconds}s`)
+                }
+            } else {
+                // Game still running, update session time
+                if (sessionStartTime) {
+                    sessionPlaytime = Math.floor((Date.now() - sessionStartTime) / 1000)
+                }
             }
-        }
+        } else {
+            // No game running, check if ANY game started
+            for (const gameId in GAMES) {
+                const game = GAMES[gameId]
+                const found = game.processNames.some(name => uniqueNames.has(name))
 
-        if (isGameRunning && sessionStartTime) {
-            sessionPlaytime = Math.floor((Date.now() - sessionStartTime) / 1000)
+                if (found) {
+                    // Found a running game! Switch to it and start tracking
+                    activeGameId = gameId
+                    store.set('activeGameId', gameId)
+
+                    isGameRunning = true
+                    sessionStartTime = Date.now()
+                    sessionPlaytime = 0
+                    console.log(`${game.name} started (Auto-Detected)`)
+                    break // Stop tracking other games, one at a time
+                }
+            }
         }
 
         sendStateUpdate()
