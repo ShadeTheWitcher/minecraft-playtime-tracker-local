@@ -179,7 +179,7 @@ let isQuitting = false
 
 // Supabase State
 let supabase: SupabaseClient | null = null
-let currentUser: { id: string; email: string } | null = null
+let currentUser: { id: string; email?: string } | null = null
 let isOnline = true
 
 process.env.DIST = path.join(__dirname, '../dist')
@@ -310,8 +310,32 @@ ipcMain.on('auth:init', (_event, { url, key }) => {
     if (url && key) {
         if (!supabase) {
             try {
-                supabase = createClient(url, key)
-                console.log('[Auth] Supabase client initialized in Main process')
+                // Persistent Storage for Main Process Supabase
+                const mainStorage = {
+                    getItem: (key: string) => store.get(`supabase_auth_${key}`) as string,
+                    setItem: (key: string, value: string) => store.set(`supabase_auth_${key}`, value),
+                    removeItem: (key: string) => store.delete(`supabase_auth_${key}` as any),
+                }
+
+                supabase = createClient(url, key, {
+                    auth: {
+                        storage: mainStorage,
+                        autoRefreshToken: true,
+                        persistSession: true,
+                        detectSessionInUrl: false
+                    }
+                })
+                console.log('[Auth] Supabase client initialized with Persistent Storage in Main')
+
+                // Try to restore session immediately
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    if (session) {
+                        console.log('[Auth] Restored session from storage for:', session.user.email)
+                        currentUser = session.user
+                        setActiveUser(session.user.id, session.user.email)
+                        syncWithSupabase()
+                    }
+                })
             } catch (e) {
                 console.error('[Auth] Failed to init Supabase:', e)
             }
@@ -323,46 +347,47 @@ ipcMain.on('auth:init', (_event, { url, key }) => {
 
 ipcMain.on('auth:session', async (_event, session) => {
     if (supabase && session) {
-        console.log('[Auth] Received session for:', session.user.email)
+        console.log('[Auth] Received/Updated session for:', session.user.email)
         currentUser = session.user
 
-        // Authenticate the Main Process Client!
         try {
-            const { error } = await supabase.auth.setSession({
-                access_token: session.access_token,
-                refresh_token: session.refresh_token
-            })
+            // Check if Main Process already has a valid session to avoid redundant calls
+            const { data: { session: currentSession } } = await supabase.auth.getSession()
 
-            if (error) {
-                // Suppress scary "fetch failed" logs if it's just offline
-                if (error.message && (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND'))) {
-                    console.log('[Auth] Offline mode: Could not authenticate with Supabase.')
-                    isOnline = false
-                    isOnline = false
+            // Only set if different or expired
+            if (!currentSession || currentSession.access_token !== session.access_token) {
+                const { error } = await supabase.auth.setSession({
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token
+                })
+
+                if (error) {
+                    // Suppress scary "fetch failed" logs if it's just offline
+                    if (error.message && (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND') || error.message.includes('Failed to fetch'))) {
+                        console.log('[Auth] Offline mode: Could not sync session at this moment.')
+                        isOnline = false
+                    } else {
+                        console.error('[Auth] Failed to set session in Main:', error)
+                        // If it's a "token expired" or similar, maybe the frontend will refresh it. 
+                        // We avoid calling force-logout unless it's a truly unrecoverable error.
+                        if (error.status === 400 && error.message.includes('refresh_token_not_found')) {
+                            console.log('[Auth] Unrecoverable session error. Requesting logout.')
+                            _event.sender.send('auth:force-logout')
+                        }
+                    }
                 } else {
-                    console.error('[Auth] Failed to set session in Main:', error)
-                    isOnline = false
-
-                    // Critical Error: Session is invalid/expired. Tell Frontend to purge it.
-                    console.log('[Auth] requesting Frontend to Force Logout...')
-                    _event.sender.send('auth:force-logout')
+                    console.log('[Auth] Main process session updated and persisted')
+                    isOnline = true
+                    setActiveUser(session.user.id, session.user.email)
+                    await syncWithSupabase()
                 }
             } else {
-                console.log('[Auth] Main process authenticated successfully')
-                isOnline = true
-
-                // SWITCH TO USER CONTEXT (Pass email for default display name)
+                // Session is already matched, just ensure user context is set
                 setActiveUser(session.user.id, session.user.email)
-
-                // Trigger sync now that we are authenticated
-                await syncWithSupabase()
+                isOnline = true
             }
         } catch (e: any) {
-            if (e.cause && e.cause.code === 'ENOTFOUND') {
-                console.log('[Auth] Offline mode: Network unavailable.')
-            } else {
-                console.error('[Auth] Unexpected error setting session:', e)
-            }
+            console.error('[Auth] Unexpected error during session sync:', e)
         }
     }
 })
@@ -715,7 +740,15 @@ async function syncWithSupabase() {
 
     const localGames = getUserGames()
 
-    for (const [gameId, data] of Object.entries(localGames)) {
+    // Ensure session is fresh before syncing
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session) {
+        console.warn('[Sync] Session invalid or expired during sync attempt.')
+        isSyncing = false
+        return
+    }
+
+    for (const [gameId, data] of Object.entries(localGames) as [string, any][]) {
         try {
             // 1. Calculate Local Delta (Unsynced Time)
             const history = data.history || []
@@ -726,10 +759,10 @@ async function syncWithSupabase() {
             console.log(`[Sync] ${gameId}: Found ${unsyncedSessions.length} unsynced sessions. Delta: +${deltaSeconds}s`)
 
             // 2. Fetch Remote State
-            const { data: remoteGame, error: fetchError } = await supabase
+            const { data: remoteGame, error: fetchError } = await supabase!
                 .from('games')
                 .select('*')
-                .eq('user_id', currentUser.id)
+                .eq('user_id', currentUser!.id)
                 .eq('identifier', gameId)
                 .single()
 
@@ -848,10 +881,10 @@ async function syncWithSupabase() {
 
     // 6. DISCOVERY: Pull new games from Cloud that we don't have locally
     try {
-        const { data: allRemoteGames, error: discoveryError } = await supabase
+        const { data: allRemoteGames, error: discoveryError } = await supabase!
             .from('games')
             .select('*')
-            .eq('user_id', currentUser.id)
+            .eq('user_id', currentUser!.id)
 
         if (!discoveryError && allRemoteGames) {
             let discoveredCount = 0
@@ -869,8 +902,8 @@ async function syncWithSupabase() {
                             store.set(getStorePath('games.minecraft-java'), javaData)
 
                             // FORCE PUSH to 'minecraft-java' right now so the user sees it immediately
-                            supabase.from('games').upsert({
-                                user_id: currentUser.id,
+                            supabase!.from('games').upsert({
+                                user_id: currentUser!.id,
                                 identifier: 'minecraft-java',
                                 name: GAMES['minecraft-java'].name,
                                 process_names: GAMES['minecraft-java'].processNames,
@@ -881,8 +914,8 @@ async function syncWithSupabase() {
                     }
 
                     // 2. Delete the legacy 'minecraft' from cloud definitively
-                    supabase.from('games').delete()
-                        .eq('user_id', currentUser.id)
+                    supabase!.from('games').delete()
+                        .eq('user_id', currentUser!.id)
                         .eq('identifier', 'minecraft')
                         .then(({ error }) => {
                             if (!error) console.log('[Sync] Legacy minecraft deleted from cloud')
@@ -1078,3 +1111,19 @@ app.on('before-quit', () => {
         console.log(`Saved final session for ${activeGameId}: ${seconds}s`)
     }
 })
+
+// Periodic Session Refresh (Every 20 minutes) to prevent accidental logout
+setInterval(async () => {
+    if (supabase && currentUser) {
+        try {
+            const { data, error } = await supabase.auth.getSession()
+            if (error) {
+                console.error('[Auth] Periodic keep-alive check failed:', error.message)
+            } else if (data.session) {
+                // console.log('[Auth] Session keep-alive: OK')
+            }
+        } catch (e) {
+            // Silently ignore network errors during keep-alive
+        }
+    }
+}, 1000 * 60 * 20)
