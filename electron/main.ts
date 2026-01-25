@@ -412,11 +412,68 @@ ipcMain.on('edit-game', (_event, { id, name, processNames }: { id: string; name:
 
     // Trigger Sync to push changes to cloud (if logged in)
     if (currentUser) {
-        // We set sync to false temporarily to force a run if needed, but better to just call it
         syncWithSupabase().catch(err => console.error('[IPC] Sync after edit failed:', err))
     }
 
     sendStateUpdate()
+})
+
+ipcMain.on('delete-game', async (_event, gameId: string) => {
+    console.log(`[IPC] Received delete-game request: ${gameId}`)
+
+    if (!GAMES[gameId]) {
+        console.error(`[IPC] Delete failed: Game ${gameId} not found`)
+        return
+    }
+
+    // 1. Remove from Memory
+    delete GAMES[gameId]
+    store.set('gameDefinitions', GAMES)
+
+    // 2. Remove from Local Store (Scoped to current user)
+    const userPath = getStorePath(`games.${gameId}`)
+    store.delete(userPath as any)
+
+    // 3. Delete from Supabase (if logged in)
+    if (currentUser && supabase) {
+        try {
+            // Delete entries first (if any)
+            const { error: historyError } = await supabase
+                .from('playtime_entries')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('game_identifier', gameId)
+
+            if (historyError) console.error('[Sync] Failed to delete history:', historyError)
+
+            const { error: gameError } = await supabase
+                .from('games')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('identifier', gameId)
+
+            if (gameError) console.error('[Sync] Failed to delete game from cloud:', gameError)
+            else console.log('[Sync] Game deleted from Supabase')
+        } catch (e) {
+            console.error('[Sync] Exception during remote delete:', e)
+        }
+    }
+
+    // 4. Reset active game if we just deleted the running/active one
+    if (activeGameId === gameId) {
+        activeGameId = Object.keys(GAMES)[0] || ''
+        store.set('activeGameId', activeGameId)
+        isGameRunning = false
+        sessionStartTime = null
+        sessionPlaytime = 0
+    }
+
+    sendStateUpdate()
+})
+
+ipcMain.on('sync:trigger', async () => {
+    console.log('[IPC] Manual sync triggered')
+    await syncWithSupabase()
 })
 
 ipcMain.handle('settings:get', () => {
@@ -601,9 +658,9 @@ async function syncWithSupabase() {
             let remoteTotal = remoteGame?.total_time || 0
             const remoteLastSession = remoteGame?.last_session || 0
 
-            // 3. PUSH: If we have new data, update Remote
-            if (deltaSeconds > 0) {
-                const newTotal = remoteTotal + deltaSeconds
+            // 3. PUSH: If we have new data or local is ahead (e.g. after migration), update Remote
+            if (deltaSeconds > 0 || data.totalPlaytime > remoteTotal) {
+                const newTotal = Math.max(remoteTotal + deltaSeconds, data.totalPlaytime)
 
                 const { error: upsertError } = await supabase
                     .from('games')
@@ -611,15 +668,15 @@ async function syncWithSupabase() {
                         user_id: currentUser.id,
                         identifier: gameId,
                         name: GAMES[gameId]?.name || gameId,
-                        process_names: GAMES[gameId]?.processNames || [], // PUSH: Sync process names
+                        process_names: GAMES[gameId]?.processNames || [],
                         total_time: newTotal,
-                        last_session: data.lastSession // Update last session to latest local
+                        last_session: data.lastSession
                     }, { onConflict: 'user_id, identifier' })
 
                 if (upsertError) {
                     console.error(`[Sync] Failed to push update for ${gameId}:`, upsertError)
                 } else {
-                    console.log(`[Sync] Pushed +${deltaSeconds}s to ${gameId}. New Remote Total: ${newTotal}`)
+                    console.log(`[Sync] Pushed update for ${gameId}. New Remote Total: ${newTotal}`)
 
                     // 3b. NEW: Sync History (Batch Push)
                     const entriesToPush = unsyncedSessions.map((h: any) => ({
@@ -712,6 +769,41 @@ async function syncWithSupabase() {
         if (!discoveryError && allRemoteGames) {
             let discoveredCount = 0
             for (const remoteGame of allRemoteGames) {
+                // LEGACY CLEANUP: If we find the old 'minecraft' ID in the cloud
+                if (remoteGame.identifier === 'minecraft') {
+                    console.log('[Sync] Found legacy minecraft in cloud. Migrating and cleaning up...')
+
+                    // 1. Move time to Java
+                    const javaData = store.get(getStorePath('games.minecraft-java')) as any
+                    if (javaData) {
+                        // Aggressive Merge: If remote legacy has more time, we take it.
+                        if (remoteGame.total_time > javaData.totalPlaytime) {
+                            javaData.totalPlaytime = remoteGame.total_time
+                            store.set(getStorePath('games.minecraft-java'), javaData)
+
+                            // FORCE PUSH to 'minecraft-java' right now so the user sees it immediately
+                            supabase.from('games').upsert({
+                                user_id: currentUser.id,
+                                identifier: 'minecraft-java',
+                                name: GAMES['minecraft-java'].name,
+                                process_names: GAMES['minecraft-java'].processNames,
+                                total_time: javaData.totalPlaytime,
+                                last_session: javaData.lastSession
+                            }, { onConflict: 'user_id, identifier' }).then(() => console.log('[Sync] Aggressive migration: Time pushed to Minecraft (Java)'))
+                        }
+                    }
+
+                    // 2. Delete the legacy 'minecraft' from cloud definitively
+                    supabase.from('games').delete()
+                        .eq('user_id', currentUser.id)
+                        .eq('identifier', 'minecraft')
+                        .then(({ error }) => {
+                            if (!error) console.log('[Sync] Legacy minecraft deleted from cloud')
+                            else console.error('[Sync] Failed to delete legacy minecraft from cloud:', error)
+                        })
+                    continue
+                }
+
                 if (!GAMES[remoteGame.identifier]) {
                     console.log(`[Sync] Discovered new game from cloud: ${remoteGame.name} (${remoteGame.identifier})`)
 
@@ -734,6 +826,19 @@ async function syncWithSupabase() {
                     store.set(getStorePath(`games.${remoteGame.identifier}`), initialStats)
 
                     discoveredCount++
+                } else {
+                    // Game exists locally. Check if we should update its metadata in the cloud if needed
+                    // (This ensures that new games like 'minecraft-java' get their names PUSHED even if 0 playtime)
+                    if (remoteGame.name !== GAMES[remoteGame.identifier].name) {
+                        supabase!.from('games').upsert({
+                            user_id: currentUser!.id,
+                            identifier: remoteGame.identifier,
+                            name: GAMES[remoteGame.identifier].name,
+                            process_names: GAMES[remoteGame.identifier].processNames,
+                            total_time: remoteGame.total_time,
+                            last_session: remoteGame.last_session
+                        }, { onConflict: 'user_id, identifier' }).then(() => console.log(`[Sync] Updated cloud name for ${remoteGame.identifier}`))
+                    }
                 }
             }
 

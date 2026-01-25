@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import '../App.css';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 interface EditGameProps {
     gameId: string;
     initialName: string;
     initialProcessNames: string[];
     onSave: (id: string, name: string, processNames: string[]) => void;
+    onDelete: (id: string) => void;
     onCancel: () => void;
 }
 
-export function EditGameView({ gameId, initialName, initialProcessNames, onSave, onCancel }: EditGameProps) {
+export function EditGameView({ gameId, initialName, initialProcessNames, onSave, onDelete, onCancel }: EditGameProps) {
     const [name, setName] = useState(initialName);
     const [processNames, setProcessNames] = useState(initialProcessNames.join(', '));
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -54,6 +57,28 @@ export function EditGameView({ gameId, initialName, initialProcessNames, onSave,
                     <button type="button" onClick={onCancel} className="cancel-btn" style={{ flex: 1, background: '#444' }}>Cancel</button>
                 </div>
             </form>
+
+            <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid #444' }}>
+                <h3 style={{ color: '#ff4444', marginBottom: '1rem' }}>Danger Zone</h3>
+                <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="cancel-btn"
+                    style={{ background: '#442222', border: '1px solid #ff4444', color: '#ff4444', width: '100%', cursor: 'pointer' }}
+                >
+                    Delete Game
+                </button>
+                <small style={{ color: '#888', display: 'block', marginTop: '10px' }}>
+                    This will permanently remove the game definition and its playtime history.
+                </small>
+            </div>
+
+            <ConfirmationModal
+                isOpen={showDeleteConfirm}
+                title={`Delete ${initialName}?`}
+                message={`Are you sure you want to delete ${initialName}? All playtime history will be lost forever.`}
+                onConfirm={() => onDelete(gameId)}
+                onCancel={() => setShowDeleteConfirm(false)}
+            />
         </div>
     );
 }

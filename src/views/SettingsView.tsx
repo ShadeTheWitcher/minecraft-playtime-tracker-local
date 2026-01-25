@@ -40,6 +40,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
         setTimeout(() => setStatusMessage(''), 3000);
     };
 
+    const handleSync = () => {
+        if (window.ipcRenderer) {
+            window.ipcRenderer.send('sync:trigger');
+            setStatusMessage(language === 'es' ? 'Sincronización iniciada...' : 'Sync started...');
+            setTimeout(() => setStatusMessage(''), 3000);
+        }
+    };
+
     return (
         <div className="settings-container">
             <h1>{language === 'es' ? 'Ajustes' : 'Settings'}</h1>
@@ -122,8 +130,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
                 </div>
             </div>
 
-            <div className="settings-actions">
+            <div className="settings-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                 <button className="save-btn" onClick={handleSave}>{language === 'es' ? 'Guardar Cambios' : 'Save Changes'}</button>
+                <button
+                    className="save-btn"
+                    onClick={handleSync}
+                    style={{ background: '#444', color: '#fff' }}
+                    disabled={!userEmail}
+                >
+                    {language === 'es' ? 'Sincronizar Ahora' : 'Sync Now'}
+                </button>
                 {statusMessage && <span className="status-msg">{statusMessage}</span>}
             </div>
         </div>

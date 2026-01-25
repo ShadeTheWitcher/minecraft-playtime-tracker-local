@@ -28,14 +28,14 @@ function App() {
     minimizeToTray: true,
     lastSession: 0,
     history: [],
-    activeGameId: 'minecraft',
-    gameName: 'Minecraft',
+    activeGameId: 'minecraft-java',
+    gameName: 'Minecraft (Java)',
     displayName: '',
     games: []
   })
 
   // UI State
-  const [selectedGameId, setSelectedGameId] = useState<string>('minecraft')
+  const [selectedGameId, setSelectedGameId] = useState<string>('minecraft-java')
   const [viewMode, setViewMode] = useState<'details' | 'add' | 'settings' | 'edit'>('details')
   const [showAuthModal, setShowAuthModal] = useState(false)
 
@@ -144,6 +144,13 @@ function App() {
     setViewMode('details')
   }
 
+  const handleDeleteGame = (id: string) => {
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('delete-game', id)
+    }
+    setViewMode('details')
+  }
+
   return (
     <div className="app-layout">
       {showAuthModal && (
@@ -181,6 +188,7 @@ function App() {
             initialName={selectedGameMeta.name}
             initialProcessNames={selectedGameMeta.processNames || []}
             onSave={handleEditGame}
+            onDelete={handleDeleteGame}
             onCancel={() => setViewMode('details')}
           />
         ) : (
