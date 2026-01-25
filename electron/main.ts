@@ -860,24 +860,46 @@ async function syncWithSupabase() {
 function sendStateUpdate() {
     if (win) {
         // STORE: Scoped
+        const bedrockData = store.get(getStorePath('games.minecraft-bedrock')) as any || { totalPlaytime: 0 }
+        const hasPlayedBedrock = (bedrockData.totalPlaytime || 0) > 0
         const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
         const settings = getUserSettings()
 
-        const gamesList = Object.values(GAMES).map(g => {
-            const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
-            return {
-                id: g.id,
-                name: g.name,
-                totalTime: gData.totalPlaytime || 0,
-                lastSession: gData.lastSession || 0,
-                history: (gData.history || []).slice(-50).reverse(),
-                processNames: g.processNames
-            }
-        })
+        const gamesList = Object.values(GAMES)
+            .filter(g => {
+                // HIDE: If it's Bedrock and hasn't been played yet
+                if (g.id === 'minecraft-bedrock' && !hasPlayedBedrock) return false
+                return true
+            })
+            .map(g => {
+                const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+
+                // RENAME: If Java and Bedrock hasn't been played, call it just "Minecraft"
+                let displayName = g.name
+                if (g.id === 'minecraft-java' && !hasPlayedBedrock) {
+                    displayName = 'Minecraft'
+                }
+
+                return {
+                    id: g.id,
+                    name: displayName,
+                    totalTime: gData.totalPlaytime || 0,
+                    lastSession: gData.lastSession || 0,
+                    history: (gData.history || []).slice(-50).reverse(),
+                    processNames: g.processNames
+                }
+            })
+
+        // Find active game name for display
+        const activeG = GAMES[activeGameId]
+        let activeDisplayName = activeG?.name || 'Unknown'
+        if (activeGameId === 'minecraft-java' && !hasPlayedBedrock) {
+            activeDisplayName = 'Minecraft'
+        }
 
         win.webContents.send('app-state', {
             activeGameId: activeGameId,
-            gameName: GAMES[activeGameId]?.name || 'Unknown',
+            gameName: activeDisplayName,
             isPlaying: isGameRunning,
             sessionTime: sessionPlaytime,
             totalTime: gameData.totalPlaytime || 0,
