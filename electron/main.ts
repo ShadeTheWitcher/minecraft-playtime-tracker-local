@@ -226,6 +226,10 @@ function createWindow() {
         }
         return true
     })
+
+    win.on('closed', () => {
+        win = null
+    })
 }
 
 function setActiveUser(userId: string, email?: string) {
@@ -917,7 +921,7 @@ async function syncWithSupabase() {
 }
 
 function sendStateUpdate() {
-    if (win) {
+    if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
         // STORE: Scoped
         const bedrockData = store.get(getStorePath('games.minecraft-bedrock')) as any || { totalPlaytime: 0 }
         const hasPlayedBedrock = (bedrockData.totalPlaytime || 0) > 0
@@ -979,7 +983,12 @@ function sendStateUpdate() {
 }
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    const settings = getUserSettings()
+    // If user prefers NOT to stay in tray, quit the app when window closes
+    if (settings.minimizeToTray === false) {
+        app.quit()
+    } else if (process.platform !== 'darwin') {
+        // Keep running in tray (standard behavior)
     }
 })
 
