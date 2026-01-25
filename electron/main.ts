@@ -921,73 +921,76 @@ async function syncWithSupabase() {
 }
 
 function sendStateUpdate() {
-    if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
-        // STORE: Scoped
-        const bedrockData = store.get(getStorePath('games.minecraft-bedrock')) as any || { totalPlaytime: 0 }
-        const hasPlayedBedrock = (bedrockData.totalPlaytime || 0) > 0
-        const isCurrentlyPlayingBedrock = isGameRunning && activeGameId === 'minecraft-bedrock'
-        const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
-        const settings = getUserSettings()
+    try {
+        if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+            // STORE: Scoped
+            const bedrockData = store.get(getStorePath('games.minecraft-bedrock')) as any || { totalPlaytime: 0 }
+            const hasPlayedBedrock = (bedrockData.totalPlaytime || 0) > 0
+            const isCurrentlyPlayingBedrock = isGameRunning && activeGameId === 'minecraft-bedrock'
+            const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+            const settings = getUserSettings()
 
-        const gamesList = Object.values(GAMES)
-            .filter(g => {
-                // HIDE: If it's Bedrock and hasn't been played yet AND is not currently running
-                if (g.id === 'minecraft-bedrock' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) return false
-                return true
+            const gamesList = Object.values(GAMES)
+                .filter(g => {
+                    // HIDE: If it's Bedrock and hasn't been played yet AND is not currently running
+                    if (g.id === 'minecraft-bedrock' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) return false
+                    return true
+                })
+                .map(g => {
+                    const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+
+                    // RENAME: If Java and Bedrock hasn't been played (or is not running), call it just "Minecraft"
+                    let displayName = g.name
+                    if (g.id === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
+                        displayName = 'Minecraft'
+                    }
+
+                    return {
+                        id: g.id,
+                        name: displayName,
+                        totalTime: gData.totalPlaytime || 0,
+                        lastSession: gData.lastSession || 0,
+                        history: (gData.history || []).slice(-50).reverse(),
+                        processNames: g.processNames
+                    }
+                })
+
+            // Find active game name for display
+            const activeG = GAMES[activeGameId]
+            let activeDisplayName = activeG?.name || 'Unknown'
+            if (activeGameId === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
+                activeDisplayName = 'Minecraft'
+            }
+
+            win.webContents.send('app-state', {
+                activeGameId: activeGameId,
+                gameName: activeDisplayName,
+                isPlaying: isGameRunning,
+                sessionTime: sessionPlaytime,
+                totalTime: gameData.totalPlaytime || 0,
+                lastSession: gameData.lastSession || 0,
+                history: (gameData.history || []).slice(-50).reverse(),
+                displayName: settings.displayName || '',
+                language: settings.language || 'es',
+                runAtStartup: settings.runAtStartup || false,
+                minimizeToTray: settings.minimizeToTray !== undefined ? settings.minimizeToTray : true,
+                games: gamesList,
+                isOnline: isOnline,
+                availablePresets: Object.values({ ...defaultGames, ...additionalPresets })
+                    .filter(pg => !GAMES[pg.id])
             })
-            .map(g => {
-                const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
-
-                // RENAME: If Java and Bedrock hasn't been played (or is not running), call it just "Minecraft"
-                let displayName = g.name
-                if (g.id === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
-                    displayName = 'Minecraft'
-                }
-
-                return {
-                    id: g.id,
-                    name: displayName,
-                    totalTime: gData.totalPlaytime || 0,
-                    lastSession: gData.lastSession || 0,
-                    history: (gData.history || []).slice(-50).reverse(),
-                    processNames: g.processNames
-                }
-            })
-
-        // Find active game name for display
-        const activeG = GAMES[activeGameId]
-        let activeDisplayName = activeG?.name || 'Unknown'
-        if (activeGameId === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
-            activeDisplayName = 'Minecraft'
         }
-
-        win.webContents.send('app-state', {
-            activeGameId: activeGameId,
-            gameName: activeDisplayName,
-            isPlaying: isGameRunning,
-            sessionTime: sessionPlaytime,
-            totalTime: gameData.totalPlaytime || 0,
-            lastSession: gameData.lastSession || 0,
-            history: (gameData.history || []).slice(-50).reverse(),
-            displayName: settings.displayName || '',
-            language: settings.language || 'es',
-            runAtStartup: settings.runAtStartup || false,
-            minimizeToTray: settings.minimizeToTray !== undefined ? settings.minimizeToTray : true,
-            games: gamesList,
-            isOnline: isOnline,
-            availablePresets: Object.values({ ...defaultGames, ...additionalPresets })
-                .filter(pg => !GAMES[pg.id])
-                .map(pg => ({ id: pg.id, name: pg.name, processNames: pg.processNames }))
-        })
-    }
+    } catch (e) { }
 }
 
 app.on('window-all-closed', () => {
     const settings = getUserSettings()
     // If user prefers NOT to stay in tray, quit the app when window closes
     if (settings.minimizeToTray === false) {
+        console.log('[App] Tray disabled and window closed. Quitting app...')
         app.quit()
     } else if (process.platform !== 'darwin') {
+        console.log('[App] Window closed. Staying active in tray.')
         // Keep running in tray (standard behavior)
     }
 })
