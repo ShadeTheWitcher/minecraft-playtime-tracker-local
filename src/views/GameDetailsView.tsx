@@ -1,6 +1,7 @@
 import '../App.css'
 import { HistoryView } from './HistoryView'
 import type { HistoryItem } from '../types'
+import { getTranslation, type Language } from '../lib/translations'
 
 interface GameDetailsProps {
     gameId: string;
@@ -12,7 +13,7 @@ interface GameDetailsProps {
     history: HistoryItem[];
     formatTime: (seconds: number) => string;
     onEdit: () => void;
-    language: 'en' | 'es';
+    language: Language;
 }
 
 export function GameDetailsView({
@@ -26,6 +27,8 @@ export function GameDetailsView({
     onEdit,
     language
 }: GameDetailsProps) {
+    const t = getTranslation(language);
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%', paddingRight: '20px' }}>
             {/* Header Banner */}
@@ -58,7 +61,7 @@ export function GameDetailsView({
                             color: '#aaa',
                             marginTop: '2px' // Visual alignment
                         }}
-                        title={language === 'es' ? "Editar Ajustes" : "Edit Game Settings"}
+                        title={t.edit_settings}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.opacity = '1'
                             e.currentTarget.style.color = '#fff'
@@ -77,13 +80,13 @@ export function GameDetailsView({
                             {gameName}
                         </h1>
                         {isRunning && <span style={{ color: '#4cd964', fontSize: '0.9rem', marginTop: '8px', display: 'block', fontWeight: 'bold', letterSpacing: '1px' }}>
-                            {language === 'es' ? '• CORRIENDO AHORA' : '• RUNNING NOW'}
+                            {t.running_now}
                         </span>}
                     </div>
                 </div>
                 <div style={{ textAlign: 'right', minWidth: '150px' }}>
                     <div style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '5px' }}>
-                        {language === 'es' ? 'TIEMPO TOTAL' : 'TOTAL PLAYTIME'}
+                        {t.total_playtime}
                     </div>
                     <div style={{ fontSize: '2rem', color: '#fff' }}>{formatTime(totalTime)}</div>
                     <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px', textTransform: 'uppercase' }}>
@@ -91,13 +94,10 @@ export function GameDetailsView({
                             const hours = Math.floor(totalTime / 3600)
                             const minutes = Math.floor((totalTime % 3600) / 60)
 
-                            if (language === 'es') {
-                                if (hours > 0) return `HAS JUGADO ${hours} HORAS Y ${minutes} MINUTOS`
-                                return `HAS JUGADO ${minutes} MINUTOS`
-                            } else {
-                                if (hours > 0) return `YOU HAVE PLAYED ${hours} HOURS AND ${minutes} MINUTES`
-                                return `YOU HAVE PLAYED ${minutes} MINUTES`
+                            if (hours > 0) {
+                                return t.played_hours_mins(hours, minutes)
                             }
+                            return t.played_mins(minutes)
                         })()}
                     </div>
                 </div>
@@ -106,13 +106,13 @@ export function GameDetailsView({
             {/* Stats Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="pixel-card">
-                    <div style={{ fontSize: '0.7rem', color: '#aaa', marginBottom: '10px' }}>CURRENT SESSION</div>
+                    <div style={{ fontSize: '0.7rem', color: '#aaa', marginBottom: '10px' }}>{t.current_session}</div>
                     <div style={{ fontSize: '1.2rem', color: isRunning ? '#4cd964' : '#666' }}>
                         {formatTime(sessionTime)}
                     </div>
                 </div>
                 <div className="pixel-card">
-                    <div style={{ fontSize: '0.7rem', color: '#aaa', marginBottom: '10px' }}>LAST SESSION</div>
+                    <div style={{ fontSize: '0.7rem', color: '#aaa', marginBottom: '10px' }}>{t.last_session}</div>
                     <div style={{ fontSize: '1.2rem', color: '#fff' }}>
                         {formatTime(lastSession)}
                     </div>
@@ -120,7 +120,7 @@ export function GameDetailsView({
             </div>
 
             {/* History Section */}
-            <HistoryView history={history} formatTime={formatTime} gameName={gameName} />
+            <HistoryView history={history} formatTime={formatTime} gameName={gameName} language={language} />
         </div>
     )
 }

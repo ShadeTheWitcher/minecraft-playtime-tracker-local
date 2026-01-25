@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import './AuthModal.css'
+import { getTranslation, type Language } from '../lib/translations'
 
 interface AuthModalProps {
     onClose: () => void
     onSuccess: () => void
+    language: Language
 }
 
-export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
+export function AuthModal({ onClose, onSuccess, language }: AuthModalProps) {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [isLogin, setIsLogin] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
+    const t = getTranslation(language);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -45,13 +48,13 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
         <div className="auth-modal-overlay">
             <div className="auth-modal">
                 <button className="close-btn" onClick={onClose}>&times;</button>
-                <h2>{isLogin ? 'Login' : 'Sign Up'}</h2>
+                <h2>{isLogin ? t.login_title : t.signup_title}</h2>
 
                 {error && <div className="error-message">{error}</div>}
 
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label>Email</label>
+                        <label>{t.email_label}</label>
                         <input
                             type="email"
                             value={email}
@@ -60,7 +63,7 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
                         />
                     </div>
                     <div className="form-group">
-                        <label>Password</label>
+                        <label>{t.password_label}</label>
                         <input
                             type="password"
                             value={password}
@@ -70,14 +73,14 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
                         />
                     </div>
                     <button type="submit" disabled={loading} className="submit-btn">
-                        {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
+                        {loading ? t.processing : (isLogin ? t.login_title : t.signup_title)}
                     </button>
                 </form>
 
                 <p className="toggle-mode">
-                    {isLogin ? "Don't have an account? " : "Already have an account? "}
+                    {isLogin ? t.no_account : t.have_account}
                     <span onClick={() => setIsLogin(!isLogin)}>
-                        {isLogin ? 'Sign Up' : 'Login'}
+                        {isLogin ? t.signup_title : t.login_title}
                     </span>
                 </p>
             </div>

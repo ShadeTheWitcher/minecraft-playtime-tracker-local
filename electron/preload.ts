@@ -3,7 +3,9 @@ import { ipcRenderer, contextBridge } from 'electron'
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('electronAPI', {
     getSettings: () => ipcRenderer.invoke('settings:get'),
-    setSettings: (settings: any) => ipcRenderer.invoke('settings:set', settings)
+    setSettings: (settings: any) => ipcRenderer.invoke('settings:set', settings),
+    checkUpdates: () => ipcRenderer.invoke('app:check-updates'),
+    openExternal: (url: string) => ipcRenderer.send('app:open-external', url)
 })
 
 contextBridge.exposeInMainWorld('ipcRenderer', {

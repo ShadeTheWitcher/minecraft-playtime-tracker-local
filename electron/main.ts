@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
@@ -6,8 +6,28 @@ import util from 'util'
 import { randomUUID } from 'crypto'
 import Store from 'electron-store'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import https from 'https'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json')
+const CURRENT_VERSION = pkg.version
+const REPO_OWNER = 'ShadeTheWitcher'
+const REPO_NAME = 'minecraft-playtime-tracker-local'
 
 const execAsync = util.promisify(exec)
+
+function compareVersions(v1: string, v2: string): number {
+    const parts1 = v1.split('.').map(Number)
+    const parts2 = v2.split('.').map(Number)
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+        const p1 = parts1[i] || 0
+        const p2 = parts2[i] || 0
+        if (p1 > p2) return 1
+        if (p1 < p2) return -1
+    }
+    return 0
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -24,10 +44,15 @@ interface GameConfig {
 }
 
 const defaultGames: Record<string, GameConfig> = {
-    minecraft: {
-        id: 'minecraft',
-        name: 'Minecraft',
-        processNames: ['javaw.exe', 'java.exe', 'Minecraft.exe', 'bedrock_server.exe', 'MinecraftWindows.exe']
+    'minecraft-java': {
+        id: 'minecraft-java',
+        name: 'Minecraft (Java)',
+        processNames: ['javaw.exe', 'java.exe', 'Minecraft.exe']
+    },
+    'minecraft-bedrock': {
+        id: 'minecraft-bedrock',
+        name: 'Minecraft (Bedrock)',
+        processNames: ['bedrock_server.exe', 'Minecraft.Windows.exe']
     },
     hytale: {
         id: 'hytale',
@@ -36,15 +61,44 @@ const defaultGames: Record<string, GameConfig> = {
     }
 }
 
+const additionalPresets: Record<string, GameConfig> = {
+    'terraria': {
+        id: 'terraria',
+        name: 'Terraria',
+        processNames: ['Terraria.exe']
+    },
+    'roblox': {
+        id: 'roblox',
+        name: 'Roblox',
+        processNames: ['RobloxPlayerBeta.exe']
+    },
+    'stardew-valley': {
+        id: 'stardew-valley',
+        name: 'Stardew Valley',
+        processNames: ['Stardew Valley.exe']
+    },
+    'league-of-legends': {
+        id: 'league-of-legends',
+        name: 'League of Legends',
+        processNames: ['LeagueClient.exe', 'League of Legends.exe']
+    },
+    'valorant': {
+        id: 'valorant',
+        name: 'Valorant',
+        processNames: ['VALORANT-Win64-Shipping.exe']
+    }
+}
+
 // Store setup
 const store = new Store({
     defaults: {
-        activeGameId: 'minecraft',
+        activeGameId: 'minecraft-java',
         activeUserId: 'guest',
         users: {
             guest: {
                 games: {
-                    minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+                    'minecraft-java': { totalPlaytime: 0, lastSession: 0, history: [] },
+                    'minecraft-bedrock': { totalPlaytime: 0, lastSession: 0, history: [] },
                     hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
                 },
                 settings: {
@@ -79,6 +133,46 @@ if (store.has('games' as any) && !store.has('users')) {
 // Load definitions into memory
 let GAMES: Record<string, GameConfig> = (store.get('gameDefinitions') as Record<string, GameConfig>) || defaultGames
 
+// MIGRATION: Split 'minecraft' into 'minecraft-java' and 'minecraft-bedrock'
+if (GAMES.minecraft && !GAMES['minecraft-java']) {
+    console.log('[Migration] Splitting legacy Minecraft into Java and Bedrock...')
+
+    // 1. Add new definitions to Memory
+    GAMES['minecraft-java'] = defaultGames['minecraft-java']
+    GAMES['minecraft-bedrock'] = defaultGames['minecraft-bedrock']
+    delete GAMES.minecraft
+
+    // 2. Persist updated definitions
+    store.set('gameDefinitions', GAMES)
+
+    // 3. Migrate data for ALL users in the store
+    const users = store.get('users') as Record<string, any> || {}
+    for (const userId in users) {
+        const userGames = users[userId].games || {}
+        if (userGames.minecraft) {
+            console.log(`[Migration] Moving data for user ${userId}`)
+            // We move history/time to Java as it's the most likely one they used
+            userGames['minecraft-java'] = JSON.parse(JSON.stringify(userGames.minecraft))
+            userGames['minecraft-bedrock'] = { totalPlaytime: 0, lastSession: 0, history: [] }
+            delete userGames.minecraft
+        }
+    }
+    store.set('users', users)
+
+    // 4. Update activeGameId if it was the old one
+    if (store.get('activeGameId') === 'minecraft') {
+        store.set('activeGameId', 'minecraft-java')
+    }
+}
+
+// FIX: Update Bedrock process name if it exists with the old wrong name
+if (GAMES.minecraft && GAMES.minecraft.processNames) {
+    GAMES.minecraft.processNames = GAMES.minecraft.processNames.map(p =>
+        p === 'MinecraftWindows.exe' ? 'Minecraft.Windows.exe' : p
+    );
+    store.set('gameDefinitions', GAMES);
+}
+
 // Helpers for User-Scoped Data
 let activeUserId = store.get('activeUserId') as string || 'guest'
 
@@ -105,7 +199,7 @@ let isQuitting = false
 
 // Supabase State
 let supabase: SupabaseClient | null = null
-let currentUser: { id: string; email: string } | null = null
+let currentUser: { id: string; email?: string } | null = null
 let isOnline = true
 
 process.env.DIST = path.join(__dirname, '../dist')
@@ -152,6 +246,10 @@ function createWindow() {
         }
         return true
     })
+
+    win.on('closed', () => {
+        win = null
+    })
 }
 
 function setActiveUser(userId: string, email?: string) {
@@ -164,7 +262,8 @@ function setActiveUser(userId: string, email?: string) {
         console.log(`[User] Initializing new bucket for ${userId}`)
 
         let initialGames = {
-            minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+            'minecraft-java': { totalPlaytime: 0, lastSession: 0, history: [] },
+            'minecraft-bedrock': { totalPlaytime: 0, lastSession: 0, history: [] },
             hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
         }
 
@@ -231,8 +330,32 @@ ipcMain.on('auth:init', (_event, { url, key }) => {
     if (url && key) {
         if (!supabase) {
             try {
-                supabase = createClient(url, key)
-                console.log('[Auth] Supabase client initialized in Main process')
+                // Persistent Storage for Main Process Supabase
+                const mainStorage = {
+                    getItem: (key: string) => store.get(`supabase_auth_${key}`) as string,
+                    setItem: (key: string, value: string) => store.set(`supabase_auth_${key}`, value),
+                    removeItem: (key: string) => store.delete(`supabase_auth_${key}` as any),
+                }
+
+                supabase = createClient(url, key, {
+                    auth: {
+                        storage: mainStorage,
+                        autoRefreshToken: true,
+                        persistSession: true,
+                        detectSessionInUrl: false
+                    }
+                })
+                console.log('[Auth] Supabase client initialized with Persistent Storage in Main')
+
+                // Try to restore session immediately
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    if (session) {
+                        console.log('[Auth] Restored session from storage for:', session.user.email)
+                        currentUser = session.user
+                        setActiveUser(session.user.id, session.user.email)
+                        syncWithSupabase()
+                    }
+                })
             } catch (e) {
                 console.error('[Auth] Failed to init Supabase:', e)
             }
@@ -244,46 +367,47 @@ ipcMain.on('auth:init', (_event, { url, key }) => {
 
 ipcMain.on('auth:session', async (_event, session) => {
     if (supabase && session) {
-        console.log('[Auth] Received session for:', session.user.email)
+        console.log('[Auth] Received/Updated session for:', session.user.email)
         currentUser = session.user
 
-        // Authenticate the Main Process Client!
         try {
-            const { error } = await supabase.auth.setSession({
-                access_token: session.access_token,
-                refresh_token: session.refresh_token
-            })
+            // Check if Main Process already has a valid session to avoid redundant calls
+            const { data: { session: currentSession } } = await supabase.auth.getSession()
 
-            if (error) {
-                // Suppress scary "fetch failed" logs if it's just offline
-                if (error.message && (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND'))) {
-                    console.log('[Auth] Offline mode: Could not authenticate with Supabase.')
-                    isOnline = false
-                    isOnline = false
+            // Only set if different or expired
+            if (!currentSession || currentSession.access_token !== session.access_token) {
+                const { error } = await supabase.auth.setSession({
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token
+                })
+
+                if (error) {
+                    // Suppress scary "fetch failed" logs if it's just offline
+                    if (error.message && (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND') || error.message.includes('Failed to fetch'))) {
+                        console.log('[Auth] Offline mode: Could not sync session at this moment.')
+                        isOnline = false
+                    } else {
+                        console.error('[Auth] Failed to set session in Main:', error)
+                        // If it's a "token expired" or similar, maybe the frontend will refresh it. 
+                        // We avoid calling force-logout unless it's a truly unrecoverable error.
+                        if (error.status === 400 && error.message.includes('refresh_token_not_found')) {
+                            console.log('[Auth] Unrecoverable session error. Requesting logout.')
+                            _event.sender.send('auth:force-logout')
+                        }
+                    }
                 } else {
-                    console.error('[Auth] Failed to set session in Main:', error)
-                    isOnline = false
-
-                    // Critical Error: Session is invalid/expired. Tell Frontend to purge it.
-                    console.log('[Auth] requesting Frontend to Force Logout...')
-                    _event.sender.send('auth:force-logout')
+                    console.log('[Auth] Main process session updated and persisted')
+                    isOnline = true
+                    setActiveUser(session.user.id, session.user.email)
+                    await syncWithSupabase()
                 }
             } else {
-                console.log('[Auth] Main process authenticated successfully')
-                isOnline = true
-
-                // SWITCH TO USER CONTEXT (Pass email for default display name)
+                // Session is already matched, just ensure user context is set
                 setActiveUser(session.user.id, session.user.email)
-
-                // Trigger sync now that we are authenticated
-                await syncWithSupabase()
+                isOnline = true
             }
         } catch (e: any) {
-            if (e.cause && e.cause.code === 'ENOTFOUND') {
-                console.log('[Auth] Offline mode: Network unavailable.')
-            } else {
-                console.error('[Auth] Unexpected error setting session:', e)
-            }
+            console.error('[Auth] Unexpected error during session sync:', e)
         }
     }
 })
@@ -365,11 +489,123 @@ ipcMain.on('edit-game', (_event, { id, name, processNames }: { id: string; name:
 
     // Trigger Sync to push changes to cloud (if logged in)
     if (currentUser) {
-        // We set sync to false temporarily to force a run if needed, but better to just call it
         syncWithSupabase().catch(err => console.error('[IPC] Sync after edit failed:', err))
     }
 
     sendStateUpdate()
+})
+
+ipcMain.handle('game:pick-file', async () => {
+    if (!win) return null
+
+    const result = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [
+            { name: 'Executable Files', extensions: ['exe'] }
+        ]
+    })
+
+    if (!result.canceled && result.filePaths.length > 0) {
+        const filePath = result.filePaths[0]
+        const fileName = path.basename(filePath)
+
+        // Return both name (for label) and basename (for process tracking)
+        return {
+            path: filePath,
+            basename: fileName,
+            nameSuggestion: path.parse(fileName).name
+        }
+    }
+    return null
+})
+
+ipcMain.on('add-preset-game', (_event, presetId: string) => {
+    console.log(`[IPC] Received add-preset-game request: ${presetId}`)
+    const allAvailable = { ...defaultGames, ...additionalPresets }
+    const preset = allAvailable[presetId]
+
+    if (!preset) {
+        console.error(`[IPC] Preset ${presetId} not found`)
+        return
+    }
+
+    if (GAMES[presetId]) {
+        console.log(`[IPC] Game ${presetId} already exists`)
+        return
+    }
+
+    // Update Memory
+    GAMES[presetId] = JSON.parse(JSON.stringify(preset))
+
+    // Update Store
+    store.set('gameDefinitions', GAMES)
+
+    // Initialize stats for new game (if not exists in user scoped data)
+    const userPath = getStorePath(`games.${presetId}`)
+    if (!store.has(userPath as any)) {
+        store.set(userPath as any, { totalPlaytime: 0, lastSession: 0, history: [] })
+    }
+
+    console.log(`[IPC] Preset restored: ${preset.name}`)
+    sendStateUpdate()
+})
+
+ipcMain.on('delete-game', async (_event, gameId: string) => {
+    console.log(`[IPC] Received delete-game request: ${gameId}`)
+
+    if (!GAMES[gameId]) {
+        console.error(`[IPC] Delete failed: Game ${gameId} not found`)
+        return
+    }
+
+    // 1. Remove from Memory
+    delete GAMES[gameId]
+    store.set('gameDefinitions', GAMES)
+
+    // 2. Remove from Local Store (Scoped to current user)
+    const userPath = getStorePath(`games.${gameId}`)
+    store.delete(userPath as any)
+
+    // 3. Delete from Supabase (if logged in)
+    if (currentUser && supabase) {
+        try {
+            // Delete entries first (if any)
+            const { error: historyError } = await supabase
+                .from('playtime_entries')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('game_identifier', gameId)
+
+            if (historyError) console.error('[Sync] Failed to delete history:', historyError)
+
+            const { error: gameError } = await supabase
+                .from('games')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('identifier', gameId)
+
+            if (gameError) console.error('[Sync] Failed to delete game from cloud:', gameError)
+            else console.log('[Sync] Game deleted from Supabase')
+        } catch (e) {
+            console.error('[Sync] Exception during remote delete:', e)
+        }
+    }
+
+    // 4. Reset active game if we just deleted the running/active one
+    if (activeGameId === gameId) {
+        activeGameId = Object.keys(GAMES)[0] || ''
+        store.set('activeGameId', activeGameId)
+        isGameRunning = false
+        sessionStartTime = null
+        sessionPlaytime = 0
+    }
+
+    sendStateUpdate()
+})
+
+ipcMain.on('sync:trigger', async () => {
+    console.log('[IPC] Manual sync triggered')
+    await syncWithSupabase()
 })
 
 ipcMain.handle('settings:get', () => {
@@ -405,6 +641,58 @@ ipcMain.handle('settings:set', (_event, newSettings) => {
             path: app.getPath('exe')
         })
     }
+})
+
+ipcMain.handle('app:check-updates', async () => {
+    return new Promise((resolve) => {
+        const options = {
+            hostname: 'api.github.com',
+            path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'MinecraftPlaytimeTracker'
+            }
+        }
+
+        https.get(options, (res) => {
+            let data = ''
+            res.on('data', (chunk) => data += chunk)
+            res.on('end', () => {
+                try {
+                    if (res.statusCode === 200) {
+                        const release = JSON.parse(data)
+                        const latestVersion = release.tag_name.replace('v', '')
+
+                        // Proper semver comparison
+                        const isNew = compareVersions(latestVersion, CURRENT_VERSION) > 0
+
+                        resolve({
+                            isNew,
+                            version: latestVersion,
+                            url: release.html_url,
+                            current: CURRENT_VERSION
+                        })
+                    } else if (res.statusCode === 404) {
+                        console.log('[Update] No releases found for this repository.')
+                        resolve({ isNew: false, current: CURRENT_VERSION })
+                    } else {
+                        console.error('[Update] GitHub API returned status:', res.statusCode)
+                        resolve({ error: 'GitHub API error' })
+                    }
+                } catch (e) {
+                    console.error('[Update] Failed to parse GitHub API response:', e)
+                    resolve({ error: 'Parse error' })
+                }
+            })
+        }).on('error', (err) => {
+            console.error('[Update] Network error while checking for updates:', err)
+            resolve({ error: 'Network error' })
+        })
+    })
+})
+
+ipcMain.on('app:open-external', (_event, url: string) => {
+    shell.openExternal(url)
 })
 
 async function checkProcess() {
@@ -524,7 +812,15 @@ async function syncWithSupabase() {
 
     const localGames = getUserGames()
 
-    for (const [gameId, data] of Object.entries(localGames)) {
+    // Ensure session is fresh before syncing
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session) {
+        console.warn('[Sync] Session invalid or expired during sync attempt.')
+        isSyncing = false
+        return
+    }
+
+    for (const [gameId, data] of Object.entries(localGames) as [string, any][]) {
         try {
             // 1. Calculate Local Delta (Unsynced Time)
             const history = data.history || []
@@ -535,10 +831,10 @@ async function syncWithSupabase() {
             console.log(`[Sync] ${gameId}: Found ${unsyncedSessions.length} unsynced sessions. Delta: +${deltaSeconds}s`)
 
             // 2. Fetch Remote State
-            const { data: remoteGame, error: fetchError } = await supabase
+            const { data: remoteGame, error: fetchError } = await supabase!
                 .from('games')
                 .select('*')
-                .eq('user_id', currentUser.id)
+                .eq('user_id', currentUser!.id)
                 .eq('identifier', gameId)
                 .single()
 
@@ -554,9 +850,9 @@ async function syncWithSupabase() {
             let remoteTotal = remoteGame?.total_time || 0
             const remoteLastSession = remoteGame?.last_session || 0
 
-            // 3. PUSH: If we have new data, update Remote
-            if (deltaSeconds > 0) {
-                const newTotal = remoteTotal + deltaSeconds
+            // 3. PUSH: If we have new data or local is ahead (e.g. after migration), update Remote
+            if (deltaSeconds > 0 || data.totalPlaytime > remoteTotal) {
+                const newTotal = Math.max(remoteTotal + deltaSeconds, data.totalPlaytime)
 
                 const { error: upsertError } = await supabase
                     .from('games')
@@ -564,15 +860,15 @@ async function syncWithSupabase() {
                         user_id: currentUser.id,
                         identifier: gameId,
                         name: GAMES[gameId]?.name || gameId,
-                        process_names: GAMES[gameId]?.processNames || [], // PUSH: Sync process names
+                        process_names: GAMES[gameId]?.processNames || [],
                         total_time: newTotal,
-                        last_session: data.lastSession // Update last session to latest local
+                        last_session: data.lastSession
                     }, { onConflict: 'user_id, identifier' })
 
                 if (upsertError) {
                     console.error(`[Sync] Failed to push update for ${gameId}:`, upsertError)
                 } else {
-                    console.log(`[Sync] Pushed +${deltaSeconds}s to ${gameId}. New Remote Total: ${newTotal}`)
+                    console.log(`[Sync] Pushed update for ${gameId}. New Remote Total: ${newTotal}`)
 
                     // 3b. NEW: Sync History (Batch Push)
                     const entriesToPush = unsyncedSessions.map((h: any) => ({
@@ -657,14 +953,49 @@ async function syncWithSupabase() {
 
     // 6. DISCOVERY: Pull new games from Cloud that we don't have locally
     try {
-        const { data: allRemoteGames, error: discoveryError } = await supabase
+        const { data: allRemoteGames, error: discoveryError } = await supabase!
             .from('games')
             .select('*')
-            .eq('user_id', currentUser.id)
+            .eq('user_id', currentUser!.id)
 
         if (!discoveryError && allRemoteGames) {
             let discoveredCount = 0
             for (const remoteGame of allRemoteGames) {
+                // LEGACY CLEANUP: If we find the old 'minecraft' ID in the cloud
+                if (remoteGame.identifier === 'minecraft') {
+                    console.log('[Sync] Found legacy minecraft in cloud. Migrating and cleaning up...')
+
+                    // 1. Move time to Java
+                    const javaData = store.get(getStorePath('games.minecraft-java')) as any
+                    if (javaData) {
+                        // Aggressive Merge: If remote legacy has more time, we take it.
+                        if (remoteGame.total_time > javaData.totalPlaytime) {
+                            javaData.totalPlaytime = remoteGame.total_time
+                            store.set(getStorePath('games.minecraft-java'), javaData)
+
+                            // FORCE PUSH to 'minecraft-java' right now so the user sees it immediately
+                            supabase!.from('games').upsert({
+                                user_id: currentUser!.id,
+                                identifier: 'minecraft-java',
+                                name: GAMES['minecraft-java'].name,
+                                process_names: GAMES['minecraft-java'].processNames,
+                                total_time: javaData.totalPlaytime,
+                                last_session: javaData.lastSession
+                            }, { onConflict: 'user_id, identifier' }).then(() => console.log('[Sync] Aggressive migration: Time pushed to Minecraft (Java)'))
+                        }
+                    }
+
+                    // 2. Delete the legacy 'minecraft' from cloud definitively
+                    supabase!.from('games').delete()
+                        .eq('user_id', currentUser!.id)
+                        .eq('identifier', 'minecraft')
+                        .then(({ error }) => {
+                            if (!error) console.log('[Sync] Legacy minecraft deleted from cloud')
+                            else console.error('[Sync] Failed to delete legacy minecraft from cloud:', error)
+                        })
+                    continue
+                }
+
                 if (!GAMES[remoteGame.identifier]) {
                     console.log(`[Sync] Discovered new game from cloud: ${remoteGame.name} (${remoteGame.identifier})`)
 
@@ -687,6 +1018,19 @@ async function syncWithSupabase() {
                     store.set(getStorePath(`games.${remoteGame.identifier}`), initialStats)
 
                     discoveredCount++
+                } else {
+                    // Game exists locally. Check if we should update its metadata in the cloud if needed
+                    // (This ensures that new games like 'minecraft-java' get their names PUSHED even if 0 playtime)
+                    if (remoteGame.name !== GAMES[remoteGame.identifier].name) {
+                        supabase!.from('games').upsert({
+                            user_id: currentUser!.id,
+                            identifier: remoteGame.identifier,
+                            name: GAMES[remoteGame.identifier].name,
+                            process_names: GAMES[remoteGame.identifier].processNames,
+                            total_time: remoteGame.total_time,
+                            last_session: remoteGame.last_session
+                        }, { onConflict: 'user_id, identifier' }).then(() => console.log(`[Sync] Updated cloud name for ${remoteGame.identifier}`))
+                    }
                 }
             }
 
@@ -706,42 +1050,78 @@ async function syncWithSupabase() {
 }
 
 function sendStateUpdate() {
-    if (win) {
-        // STORE: Scoped
-        const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
-        const settings = getUserSettings()
+    try {
+        if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+            // STORE: Scoped
+            const bedrockData = store.get(getStorePath('games.minecraft-bedrock')) as any || { totalPlaytime: 0 }
+            const hasPlayedBedrock = (bedrockData.totalPlaytime || 0) > 0
+            const isCurrentlyPlayingBedrock = isGameRunning && activeGameId === 'minecraft-bedrock'
+            const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+            const settings = getUserSettings()
 
-        const gamesList = Object.values(GAMES).map(g => {
-            const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
-            return {
-                id: g.id,
-                name: g.name,
-                totalTime: gData.totalPlaytime || 0,
-                lastSession: gData.lastSession || 0,
-                history: (gData.history || []).slice(-50).reverse()
+            const gamesList = Object.values(GAMES)
+                .filter(g => {
+                    // HIDE: If it's Bedrock and hasn't been played yet AND is not currently running
+                    if (g.id === 'minecraft-bedrock' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) return false
+                    return true
+                })
+                .map(g => {
+                    const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
+
+                    // RENAME: If Java and Bedrock hasn't been played (or is not running), call it just "Minecraft"
+                    let displayName = g.name
+                    if (g.id === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
+                        displayName = 'Minecraft'
+                    }
+
+                    return {
+                        id: g.id,
+                        name: displayName,
+                        totalTime: gData.totalPlaytime || 0,
+                        lastSession: gData.lastSession || 0,
+                        history: (gData.history || []).slice(-50).reverse(),
+                        processNames: g.processNames
+                    }
+                })
+
+            // Find active game name for display
+            const activeG = GAMES[activeGameId]
+            let activeDisplayName = activeG?.name || 'Unknown'
+            if (activeGameId === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
+                activeDisplayName = 'Minecraft'
             }
-        })
 
-        win.webContents.send('app-state', {
-            activeGameId: activeGameId,
-            gameName: GAMES[activeGameId]?.name || 'Unknown',
-            isPlaying: isGameRunning,
-            sessionTime: sessionPlaytime,
-            totalTime: gameData.totalPlaytime || 0,
-            lastSession: gameData.lastSession || 0,
-            history: (gameData.history || []).slice(-50).reverse(),
-            displayName: settings.displayName || '',
-            language: settings.language || 'es',
-            runAtStartup: settings.runAtStartup || false,
-            minimizeToTray: settings.minimizeToTray !== undefined ? settings.minimizeToTray : true,
-            games: gamesList,
-            isOnline: isOnline
-        })
-    }
+            win.webContents.send('app-state', {
+                activeGameId: activeGameId,
+                gameName: activeDisplayName,
+                isPlaying: isGameRunning,
+                sessionTime: sessionPlaytime,
+                totalTime: gameData.totalPlaytime || 0,
+                lastSession: gameData.lastSession || 0,
+                history: (gameData.history || []).slice(-50).reverse(),
+                displayName: settings.displayName || '',
+                language: settings.language || 'es',
+                runAtStartup: settings.runAtStartup || false,
+                minimizeToTray: settings.minimizeToTray !== undefined ? settings.minimizeToTray : true,
+                games: gamesList,
+                isOnline: isOnline,
+                availablePresets: Object.values({ ...defaultGames, ...additionalPresets })
+                    .filter(pg => !GAMES[pg.id]),
+                version: CURRENT_VERSION
+            })
+        }
+    } catch (e) { }
 }
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    const settings = getUserSettings()
+    // If user prefers NOT to stay in tray, quit the app when window closes
+    if (settings.minimizeToTray === false) {
+        console.log('[App] Tray disabled and window closed. Quitting app...')
+        app.quit()
+    } else if (process.platform !== 'darwin') {
+        console.log('[App] Window closed. Staying active in tray.')
+        // Keep running in tray (standard behavior)
     }
 })
 
@@ -752,11 +1132,22 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
-    // Ensure the active user's bucket exists (especially after a reset)
+    // Ensure the active user's bucket exists
     setActiveUser(activeUserId)
 
     createWindow()
     createTray()
+
+    // Detect if app was started by the system (Startup)
+    const loginItemSettings = app.getLoginItemSettings()
+    const settings = getUserSettings()
+
+    // If opened at login AND the user has startup/tray enabled, hide the window
+    if (loginItemSettings.wasOpenedAtLogin && settings.runAtStartup) {
+        console.log('[Startup] App started by system. Hiding window...')
+        win?.hide()
+    }
+
     pollInterval = setInterval(checkProcess, POLL_INTERVAL)
 })
 
@@ -793,3 +1184,19 @@ app.on('before-quit', () => {
         console.log(`Saved final session for ${activeGameId}: ${seconds}s`)
     }
 })
+
+// Periodic Session Refresh (Every 20 minutes) to prevent accidental logout
+setInterval(async () => {
+    if (supabase && currentUser) {
+        try {
+            const { data, error } = await supabase.auth.getSession()
+            if (error) {
+                console.error('[Auth] Periodic keep-alive check failed:', error.message)
+            } else if (data.session) {
+                // console.log('[Auth] Session keep-alive: OK')
+            }
+        } catch (e) {
+            // Silently ignore network errors during keep-alive
+        }
+    }
+}, 1000 * 60 * 20)

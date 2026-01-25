@@ -28,14 +28,15 @@ function App() {
     minimizeToTray: true,
     lastSession: 0,
     history: [],
-    activeGameId: 'minecraft',
-    gameName: 'Minecraft',
+    activeGameId: 'minecraft-java',
+    gameName: 'Minecraft (Java)',
     displayName: '',
-    games: []
+    games: [],
+    availablePresets: []
   })
 
   // UI State
-  const [selectedGameId, setSelectedGameId] = useState<string>('minecraft')
+  const [selectedGameId, setSelectedGameId] = useState<string>('minecraft-java')
   const [viewMode, setViewMode] = useState<'details' | 'add' | 'settings' | 'edit'>('details')
   const [showAuthModal, setShowAuthModal] = useState(false)
 
@@ -144,12 +145,20 @@ function App() {
     setViewMode('details')
   }
 
+  const handleDeleteGame = (id: string) => {
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('delete-game', id)
+    }
+    setViewMode('details')
+  }
+
   return (
     <div className="app-layout">
       {showAuthModal && (
         <AuthModal
           onClose={() => setShowAuthModal(false)}
           onSuccess={() => setShowAuthModal(false)}
+          language={state.language}
         />
       )}
 
@@ -167,21 +176,24 @@ function App() {
         displayName={state.displayName} // USE STATE.DISPLAYNAME
         isOnline={state.isOnline}
         isConfigured={!!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY}
+        language={state.language}
       />
 
       <main className="content-area">
         {/* Conditional Rendering for Main Content */}
         {viewMode === 'add' ? (
-          <AddGameView games={state.games} />
+          <AddGameView availablePresets={state.availablePresets} language={state.language} />
         ) : viewMode === 'settings' ? (
-          <SettingsView userEmail={user?.email} currentLanguage={state.language} />
+          <SettingsView userEmail={user?.email} currentLanguage={state.language} version={state.version} />
         ) : viewMode === 'edit' && selectedGameMeta ? (
           <EditGameView
             gameId={selectedGameMeta.id}
             initialName={selectedGameMeta.name}
             initialProcessNames={selectedGameMeta.processNames || []}
             onSave={handleEditGame}
+            onDelete={handleDeleteGame}
             onCancel={() => setViewMode('details')}
+            language={state.language}
           />
         ) : (
           selectedGameMeta ? (
@@ -199,7 +211,7 @@ function App() {
             />
           ) : (
             <div style={{ padding: '20px', color: '#888' }}>
-              <h2>Select a game to view stats</h2>
+              <h2>{state.language === 'es' ? 'Selecciona un juego para ver estadísticas' : 'Select a game to view stats'}</h2>
             </div>
           )
         )}
