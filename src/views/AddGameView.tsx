@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import '../App.css'
+import { getTranslation, type Language } from '../lib/translations'
 
 interface AddGameViewProps {
     availablePresets?: { id: string; name: string; processNames: string[] }[];
+    language: Language;
 }
 
-export function AddGameView({ availablePresets }: AddGameViewProps) {
+export function AddGameView({ availablePresets, language }: AddGameViewProps) {
     const [name, setName] = useState('')
     const [processName, setProcessName] = useState('')
     const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
     const [showPresetsModal, setShowPresetsModal] = useState(false)
+    const t = getTranslation(language);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -75,7 +78,7 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                         border: '2px solid #55aa55'
                     }} onClick={e => e.stopPropagation()}>
                         <h2 className="title" style={{ fontSize: '1.2rem', marginBottom: '1.5rem', color: '#55aa55', textAlign: 'center' }}>
-                            Preset Library
+                            {t.preset_lib_title}
                         </h2>
 
                         {availablePresets && availablePresets.length > 0 ? (
@@ -102,7 +105,7 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                             </div>
                         ) : (
                             <p style={{ textAlign: 'center', color: '#888', padding: '20px' }}>
-                                All recommended games are already in your library!
+                                {t.all_presets_added}
                             </p>
                         )}
 
@@ -111,7 +114,7 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                             style={{ marginTop: '20px', width: '100%', background: '#444' }}
                             onClick={() => setShowPresetsModal(false)}
                         >
-                            Close
+                            {t.close}
                         </button>
                     </div>
                 </div>
@@ -119,28 +122,28 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
 
             {/* Header */}
             <div>
-                <h2 className="title" style={{ fontSize: '1.2rem', margin: 0 }}>Add New Game</h2>
+                <h2 className="title" style={{ fontSize: '1.2rem', margin: 0 }}>{t.add_new_game}</h2>
             </div>
 
             {/* Form Section */}
             <div className="pixel-card">
-                <h3 className="title" style={{ fontSize: '0.8rem', marginBottom: '1.5rem', opacity: 0.7 }}>CREATE CUSTOM GAME</h3>
+                <h3 className="title" style={{ fontSize: '0.8rem', marginBottom: '1.5rem', opacity: 0.7 }}>{t.create_custom_game}</h3>
                 {status === 'success' ? (
                     <div style={{ textAlign: 'center', padding: '2rem' }}>
-                        <h3 style={{ color: '#4cd964' }}>SUCCESS!</h3>
-                        <p style={{ marginTop: '1rem', fontSize: '0.8rem' }}>Game added to your library.</p>
+                        <h3 style={{ color: '#4cd964' }}>{t.success}</h3>
+                        <p style={{ marginTop: '1rem', fontSize: '0.8rem' }}>{t.game_added}</p>
                         <button
                             className="nav-btn"
                             onClick={() => setStatus('idle')}
                             style={{ marginTop: '10px', fontSize: '0.6rem' }}
                         >
-                            Add Another
+                            {t.add_another}
                         </button>
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label className="stat-label">Game Name</label>
+                            <label className="stat-label">{t.game_name}</label>
                             <input
                                 type="text"
                                 value={name}
@@ -151,7 +154,7 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            <label className="stat-label">Process Name (.exe)</label>
+                            <label className="stat-label">{t.process_name}</label>
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <input
                                     type="text"
@@ -166,11 +169,11 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                                     className="nav-btn"
                                     style={{ background: '#444', fontSize: '0.7rem', whiteSpace: 'nowrap' }}
                                 >
-                                    SEARCH .EXE
+                                    {t.search_exe}
                                 </button>
                             </div>
                             <p style={{ fontSize: '0.6rem', color: '#666', margin: '2px 0 0 0' }}>
-                                Hint: Select the game executable to fill this automatically.
+                                {t.hint_exe}
                             </p>
                         </div>
 
@@ -179,7 +182,7 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                             className="nav-btn"
                             style={{ marginTop: '1rem', background: '#4cd964', color: '#000' }}
                         >
-                            ADD CUSTOM GAME
+                            {t.add_custom_btn}
                         </button>
                     </form>
                 )}
@@ -196,9 +199,9 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                 border: '2px dashed rgba(85, 170, 85, 0.3)'
             }}>
                 <div>
-                    <h3 className="title" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#55aa55' }}> Don't want to type?</h3>
+                    <h3 className="title" style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#55aa55' }}>{t.dont_want_type}</h3>
                     <p style={{ fontSize: '0.7rem', color: '#aaa', margin: 0 }}>
-                        We have presets for Minecraft, Valorant, Terraria and more.
+                        {t.presets_desc}
                     </p>
                 </div>
                 <button
@@ -214,7 +217,7 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
                         justifyContent: 'center'
                     }}
                 >
-                    OPEN PRESET LIBRARY
+                    {t.open_preset_lib}
                 </button>
             </div>
         </div>

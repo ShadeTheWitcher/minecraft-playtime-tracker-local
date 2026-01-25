@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './SettingsView.css';
+import { getTranslation, type Language } from '../lib/translations';
 
 interface SettingsViewProps {
     userEmail: string | undefined;
-    currentLanguage: 'en' | 'es';
+    currentLanguage: Language;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage }) => {
@@ -11,8 +12,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
     const [autoSync, setAutoSync] = useState(true);
     const [runAtStartup, setRunAtStartup] = useState(false);
     const [minimizeToTray, setMinimizeToTray] = useState(true);
-    const [language, setLanguage] = useState<'en' | 'es'>(currentLanguage);
+    const [language, setLanguage] = useState<Language>(currentLanguage);
     const [statusMessage, setStatusMessage] = useState('');
+    const t = getTranslation(language);
 
     useEffect(() => {
         // Load settings on mount
@@ -36,36 +38,36 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
 
     const handleSave = async () => {
         await window.electronAPI.setSettings({ displayName, autoSync, language, runAtStartup, minimizeToTray });
-        setStatusMessage(language === 'es' ? '¡Configuración guardada!' : 'Settings saved!');
+        setStatusMessage(t.settings_saved);
         setTimeout(() => setStatusMessage(''), 3000);
     };
 
     const handleSync = () => {
         if (window.ipcRenderer) {
             window.ipcRenderer.send('sync:trigger');
-            setStatusMessage(language === 'es' ? 'Sincronización iniciada...' : 'Sync started...');
+            setStatusMessage(t.sync_started);
             setTimeout(() => setStatusMessage(''), 3000);
         }
     };
 
     return (
         <div className="settings-container">
-            <h1>{language === 'es' ? 'Ajustes' : 'Settings'}</h1>
+            <h1>{t.settings_title}</h1>
 
             <div className="settings-grid">
                 <div className="settings-section">
-                    <h2>{language === 'es' ? 'Perfil' : 'Profile'}</h2>
+                    <h2>{t.profile_section}</h2>
                     <div className="form-group">
                         <label>Email</label>
                         <input type="text" value={userEmail || 'Not logged in'} disabled className="readonly-input" />
                     </div>
                     <div className="form-group">
-                        <label>{language === 'es' ? 'Nombre Visible' : 'Display Name'}</label>
+                        <label>{t.display_name}</label>
                         <input
                             type="text"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
-                            placeholder={userEmail ? (language === 'es' ? "Ingresa tu nombre" : "Enter your username") : (language === 'es' ? "Inicia sesión para cambiar" : "Login to change")}
+                            placeholder={userEmail ? t.enter_name_placeholder : t.login_to_change}
                             disabled={!userEmail}
                             style={!userEmail ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                         />
@@ -73,12 +75,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
                 </div>
 
                 <div className="settings-section">
-                    <h2>{language === 'es' ? 'Preferencias' : 'Preferences'}</h2>
+                    <h2>{t.preferences_section}</h2>
                     <div className="form-group">
-                        <label>{language === 'es' ? 'Idioma' : 'Language'}</label>
+                        <label>{t.language_label}</label>
                         <select
                             value={language}
-                            onChange={(e) => setLanguage(e.target.value as 'en' | 'es')}
+                            onChange={(e) => setLanguage(e.target.value as Language)}
                             style={{ padding: '8px', borderRadius: '4px', background: '#333', color: '#fff', border: '1px solid #444', width: '100%' }}
                         >
                             <option value="es">Español</option>
@@ -92,12 +94,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
                                 checked={runAtStartup}
                                 onChange={(e) => setRunAtStartup(e.target.checked)}
                             />
-                            <span className="toggle-label">{language === 'es' ? 'Ejecutar al iniciar PC' : 'Run at Startup'}</span>
+                            <span className="toggle-label">{t.run_at_startup}</span>
                         </label>
                         <p className="description">
-                            {language === 'es'
-                                ? 'Lanza la aplicación automáticamente cuando inicias sesión.'
-                                : 'Launch the app automatically when you log in.'}
+                            {t.run_at_startup_desc}
                         </p>
                     </div>
 
@@ -108,12 +108,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
                                 checked={minimizeToTray}
                                 onChange={(e) => setMinimizeToTray(e.target.checked)}
                             />
-                            <span className="toggle-label">{language === 'es' ? 'Minimizar a la bandeja' : 'Minimize to Tray'}</span>
+                            <span className="toggle-label">{t.minimize_tray}</span>
                         </label>
                         <p className="description">
-                            {language === 'es'
-                                ? 'Seguir funcionando en segundo plano al cerrar.'
-                                : 'Keep running in background when closed.'}
+                            {t.minimize_tray_desc}
                         </p>
                     </div>
 
@@ -124,21 +122,21 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userEmail, currentLanguage 
                                 checked={autoSync}
                                 onChange={(e) => setAutoSync(e.target.checked)}
                             />
-                            <span className="toggle-label">{language === 'es' ? 'Sincronización' : 'Auto-Sync Data'}</span>
+                            <span className="toggle-label">{t.auto_sync}</span>
                         </label>
                     </div>
                 </div>
             </div>
 
             <div className="settings-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <button className="save-btn" onClick={handleSave}>{language === 'es' ? 'Guardar Cambios' : 'Save Changes'}</button>
+                <button className="save-btn" onClick={handleSave}>{t.save_changes}</button>
                 <button
                     className="save-btn"
                     onClick={handleSync}
                     style={{ background: '#444', color: '#fff' }}
                     disabled={!userEmail}
                 >
-                    {language === 'es' ? 'Sincronizar Ahora' : 'Sync Now'}
+                    {t.sync_now}
                 </button>
                 {statusMessage && <span className="status-msg">{statusMessage}</span>}
             </div>

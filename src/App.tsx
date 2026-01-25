@@ -158,6 +158,7 @@ function App() {
         <AuthModal
           onClose={() => setShowAuthModal(false)}
           onSuccess={() => setShowAuthModal(false)}
+          language={state.language}
         />
       )}
 
@@ -175,12 +176,13 @@ function App() {
         displayName={state.displayName} // USE STATE.DISPLAYNAME
         isOnline={state.isOnline}
         isConfigured={!!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY}
+        language={state.language}
       />
 
       <main className="content-area">
         {/* Conditional Rendering for Main Content */}
         {viewMode === 'add' ? (
-          <AddGameView availablePresets={state.availablePresets} />
+          <AddGameView availablePresets={state.availablePresets} language={state.language} />
         ) : viewMode === 'settings' ? (
           <SettingsView userEmail={user?.email} currentLanguage={state.language} />
         ) : viewMode === 'edit' && selectedGameMeta ? (
@@ -191,6 +193,7 @@ function App() {
             onSave={handleEditGame}
             onDelete={handleDeleteGame}
             onCancel={() => setViewMode('details')}
+            language={state.language}
           />
         ) : (
           selectedGameMeta ? (
@@ -208,7 +211,7 @@ function App() {
             />
           ) : (
             <div style={{ padding: '20px', color: '#888' }}>
-              <h2>Select a game to view stats</h2>
+              <h2>{state.language === 'es' ? 'Selecciona un juego para ver estadísticas' : 'Select a game to view stats'}</h2>
             </div>
           )
         )}
