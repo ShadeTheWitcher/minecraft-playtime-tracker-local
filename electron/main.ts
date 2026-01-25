@@ -24,10 +24,15 @@ interface GameConfig {
 }
 
 const defaultGames: Record<string, GameConfig> = {
-    minecraft: {
-        id: 'minecraft',
-        name: 'Minecraft',
-        processNames: ['javaw.exe', 'java.exe', 'Minecraft.exe', 'bedrock_server.exe', 'MinecraftWindows.exe']
+    'minecraft-java': {
+        id: 'minecraft-java',
+        name: 'Minecraft (Java)',
+        processNames: ['javaw.exe', 'java.exe', 'Minecraft.exe']
+    },
+    'minecraft-bedrock': {
+        id: 'minecraft-bedrock',
+        name: 'Minecraft (Bedrock)',
+        processNames: ['bedrock_server.exe', 'Minecraft.Windows.exe']
     },
     hytale: {
         id: 'hytale',
@@ -39,12 +44,13 @@ const defaultGames: Record<string, GameConfig> = {
 // Store setup
 const store = new Store({
     defaults: {
-        activeGameId: 'minecraft',
+        activeGameId: 'minecraft-java',
         activeUserId: 'guest',
         users: {
             guest: {
                 games: {
-                    minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+                    'minecraft-java': { totalPlaytime: 0, lastSession: 0, history: [] },
+                    'minecraft-bedrock': { totalPlaytime: 0, lastSession: 0, history: [] },
                     hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
                 },
                 settings: {
@@ -78,6 +84,46 @@ if (store.has('games' as any) && !store.has('users')) {
 
 // Load definitions into memory
 let GAMES: Record<string, GameConfig> = (store.get('gameDefinitions') as Record<string, GameConfig>) || defaultGames
+
+// MIGRATION: Split 'minecraft' into 'minecraft-java' and 'minecraft-bedrock'
+if (GAMES.minecraft && !GAMES['minecraft-java']) {
+    console.log('[Migration] Splitting legacy Minecraft into Java and Bedrock...')
+
+    // 1. Add new definitions to Memory
+    GAMES['minecraft-java'] = defaultGames['minecraft-java']
+    GAMES['minecraft-bedrock'] = defaultGames['minecraft-bedrock']
+    delete GAMES.minecraft
+
+    // 2. Persist updated definitions
+    store.set('gameDefinitions', GAMES)
+
+    // 3. Migrate data for ALL users in the store
+    const users = store.get('users') as Record<string, any> || {}
+    for (const userId in users) {
+        const userGames = users[userId].games || {}
+        if (userGames.minecraft) {
+            console.log(`[Migration] Moving data for user ${userId}`)
+            // We move history/time to Java as it's the most likely one they used
+            userGames['minecraft-java'] = JSON.parse(JSON.stringify(userGames.minecraft))
+            userGames['minecraft-bedrock'] = { totalPlaytime: 0, lastSession: 0, history: [] }
+            delete userGames.minecraft
+        }
+    }
+    store.set('users', users)
+
+    // 4. Update activeGameId if it was the old one
+    if (store.get('activeGameId') === 'minecraft') {
+        store.set('activeGameId', 'minecraft-java')
+    }
+}
+
+// FIX: Update Bedrock process name if it exists with the old wrong name
+if (GAMES.minecraft && GAMES.minecraft.processNames) {
+    GAMES.minecraft.processNames = GAMES.minecraft.processNames.map(p =>
+        p === 'MinecraftWindows.exe' ? 'Minecraft.Windows.exe' : p
+    );
+    store.set('gameDefinitions', GAMES);
+}
 
 // Helpers for User-Scoped Data
 let activeUserId = store.get('activeUserId') as string || 'guest'
@@ -164,7 +210,8 @@ function setActiveUser(userId: string, email?: string) {
         console.log(`[User] Initializing new bucket for ${userId}`)
 
         let initialGames = {
-            minecraft: { totalPlaytime: 0, lastSession: 0, history: [] },
+            'minecraft-java': { totalPlaytime: 0, lastSession: 0, history: [] },
+            'minecraft-bedrock': { totalPlaytime: 0, lastSession: 0, history: [] },
             hytale: { totalPlaytime: 0, lastSession: 0, history: [] }
         }
 
@@ -718,7 +765,8 @@ function sendStateUpdate() {
                 name: g.name,
                 totalTime: gData.totalPlaytime || 0,
                 lastSession: gData.lastSession || 0,
-                history: (gData.history || []).slice(-50).reverse()
+                history: (gData.history || []).slice(-50).reverse(),
+                processNames: g.processNames
             }
         })
 
