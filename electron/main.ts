@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
@@ -448,6 +448,30 @@ ipcMain.on('edit-game', (_event, { id, name, processNames }: { id: string; name:
     }
 
     sendStateUpdate()
+})
+
+ipcMain.handle('game:pick-file', async () => {
+    if (!win) return null
+
+    const result = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [
+            { name: 'Executable Files', extensions: ['exe'] }
+        ]
+    })
+
+    if (!result.canceled && result.filePaths.length > 0) {
+        const filePath = result.filePaths[0]
+        const fileName = path.basename(filePath)
+
+        // Return both name (for label) and basename (for process tracking)
+        return {
+            path: filePath,
+            basename: fileName,
+            nameSuggestion: path.parse(fileName).name
+        }
+    }
+    return null
 })
 
 ipcMain.on('add-preset-game', (_event, presetId: string) => {

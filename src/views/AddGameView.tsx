@@ -31,6 +31,18 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
         }
     }
 
+    const handlePickFile = async () => {
+        if (window.ipcRenderer) {
+            const result = await window.ipcRenderer.invoke('game:pick-file')
+            if (result) {
+                setProcessName(result.basename)
+                if (!name) {
+                    setName(result.nameSuggestion)
+                }
+            }
+        }
+    }
+
     const handleAddPreset = (id: string) => {
         if (window.ipcRenderer) {
             window.ipcRenderer.send('add-preset-game', id)
@@ -140,13 +152,26 @@ export function AddGameView({ availablePresets }: AddGameViewProps) {
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             <label className="stat-label">Process Name (.exe)</label>
-                            <input
-                                type="text"
-                                value={processName}
-                                onChange={(e) => setProcessName(e.target.value)}
-                                placeholder="e.g. Terraria.exe"
-                                style={{ background: '#222', border: '2px solid #000', color: '#fff', padding: '10px', fontFamily: 'inherit' }}
-                            />
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input
+                                    type="text"
+                                    value={processName}
+                                    onChange={(e) => setProcessName(e.target.value)}
+                                    placeholder="e.g. Terraria.exe"
+                                    style={{ flex: 1, background: '#222', border: '2px solid #000', color: '#fff', padding: '10px', fontFamily: 'inherit' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handlePickFile}
+                                    className="nav-btn"
+                                    style={{ background: '#444', fontSize: '0.7rem', whiteSpace: 'nowrap' }}
+                                >
+                                    SEARCH .EXE
+                                </button>
+                            </div>
+                            <p style={{ fontSize: '0.6rem', color: '#666', margin: '2px 0 0 0' }}>
+                                Hint: Select the game executable to fill this automatically.
+                            </p>
                         </div>
 
                         <button
