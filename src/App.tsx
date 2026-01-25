@@ -31,7 +31,8 @@ function App() {
     activeGameId: 'minecraft-java',
     gameName: 'Minecraft (Java)',
     displayName: '',
-    games: []
+    games: [],
+    availablePresets: []
   })
 
   // UI State
@@ -179,7 +180,7 @@ function App() {
       <main className="content-area">
         {/* Conditional Rendering for Main Content */}
         {viewMode === 'add' ? (
-          <AddGameView games={state.games} />
+          <AddGameView availablePresets={state.availablePresets} />
         ) : viewMode === 'settings' ? (
           <SettingsView userEmail={user?.email} currentLanguage={state.language} />
         ) : viewMode === 'edit' && selectedGameMeta ? (

@@ -41,6 +41,34 @@ const defaultGames: Record<string, GameConfig> = {
     }
 }
 
+const additionalPresets: Record<string, GameConfig> = {
+    'terraria': {
+        id: 'terraria',
+        name: 'Terraria',
+        processNames: ['Terraria.exe']
+    },
+    'roblox': {
+        id: 'roblox',
+        name: 'Roblox',
+        processNames: ['RobloxPlayerBeta.exe']
+    },
+    'stardew-valley': {
+        id: 'stardew-valley',
+        name: 'Stardew Valley',
+        processNames: ['Stardew Valley.exe']
+    },
+    'league-of-legends': {
+        id: 'league-of-legends',
+        name: 'League of Legends',
+        processNames: ['LeagueClient.exe', 'League of Legends.exe']
+    },
+    'valorant': {
+        id: 'valorant',
+        name: 'Valorant',
+        processNames: ['VALORANT-Win64-Shipping.exe']
+    }
+}
+
 // Store setup
 const store = new Store({
     defaults: {
@@ -415,6 +443,37 @@ ipcMain.on('edit-game', (_event, { id, name, processNames }: { id: string; name:
         syncWithSupabase().catch(err => console.error('[IPC] Sync after edit failed:', err))
     }
 
+    sendStateUpdate()
+})
+
+ipcMain.on('add-preset-game', (_event, presetId: string) => {
+    console.log(`[IPC] Received add-preset-game request: ${presetId}`)
+    const allAvailable = { ...defaultGames, ...additionalPresets }
+    const preset = allAvailable[presetId]
+
+    if (!preset) {
+        console.error(`[IPC] Preset ${presetId} not found`)
+        return
+    }
+
+    if (GAMES[presetId]) {
+        console.log(`[IPC] Game ${presetId} already exists`)
+        return
+    }
+
+    // Update Memory
+    GAMES[presetId] = JSON.parse(JSON.stringify(preset))
+
+    // Update Store
+    store.set('gameDefinitions', GAMES)
+
+    // Initialize stats for new game (if not exists in user scoped data)
+    const userPath = getStorePath(`games.${presetId}`)
+    if (!store.has(userPath as any)) {
+        store.set(userPath as any, { totalPlaytime: 0, lastSession: 0, history: [] })
+    }
+
+    console.log(`[IPC] Preset restored: ${preset.name}`)
     sendStateUpdate()
 })
 
@@ -862,21 +921,22 @@ function sendStateUpdate() {
         // STORE: Scoped
         const bedrockData = store.get(getStorePath('games.minecraft-bedrock')) as any || { totalPlaytime: 0 }
         const hasPlayedBedrock = (bedrockData.totalPlaytime || 0) > 0
+        const isCurrentlyPlayingBedrock = isGameRunning && activeGameId === 'minecraft-bedrock'
         const gameData = store.get(getStorePath(`games.${activeGameId}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
         const settings = getUserSettings()
 
         const gamesList = Object.values(GAMES)
             .filter(g => {
-                // HIDE: If it's Bedrock and hasn't been played yet
-                if (g.id === 'minecraft-bedrock' && !hasPlayedBedrock) return false
+                // HIDE: If it's Bedrock and hasn't been played yet AND is not currently running
+                if (g.id === 'minecraft-bedrock' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) return false
                 return true
             })
             .map(g => {
                 const gData = store.get(getStorePath(`games.${g.id}`)) as any || { totalPlaytime: 0, lastSession: 0, history: [] }
 
-                // RENAME: If Java and Bedrock hasn't been played, call it just "Minecraft"
+                // RENAME: If Java and Bedrock hasn't been played (or is not running), call it just "Minecraft"
                 let displayName = g.name
-                if (g.id === 'minecraft-java' && !hasPlayedBedrock) {
+                if (g.id === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
                     displayName = 'Minecraft'
                 }
 
@@ -893,7 +953,7 @@ function sendStateUpdate() {
         // Find active game name for display
         const activeG = GAMES[activeGameId]
         let activeDisplayName = activeG?.name || 'Unknown'
-        if (activeGameId === 'minecraft-java' && !hasPlayedBedrock) {
+        if (activeGameId === 'minecraft-java' && !hasPlayedBedrock && !isCurrentlyPlayingBedrock) {
             activeDisplayName = 'Minecraft'
         }
 
@@ -910,7 +970,10 @@ function sendStateUpdate() {
             runAtStartup: settings.runAtStartup || false,
             minimizeToTray: settings.minimizeToTray !== undefined ? settings.minimizeToTray : true,
             games: gamesList,
-            isOnline: isOnline
+            isOnline: isOnline,
+            availablePresets: Object.values({ ...defaultGames, ...additionalPresets })
+                .filter(pg => !GAMES[pg.id])
+                .map(pg => ({ id: pg.id, name: pg.name, processNames: pg.processNames }))
         })
     }
 }

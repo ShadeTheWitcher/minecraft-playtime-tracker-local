@@ -23,5 +23,6 @@ export interface AppState {
         totalTime: number;
         lastSession: number;
         history: HistoryItem[];
-    }[]
+    }[];
+    availablePresets?: { id: string; name: string; processNames: string[] }[];
 }
