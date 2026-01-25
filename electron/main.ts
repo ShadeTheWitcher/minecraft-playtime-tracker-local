@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
@@ -6,8 +6,28 @@ import util from 'util'
 import { randomUUID } from 'crypto'
 import Store from 'electron-store'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import https from 'https'
+import { createRequire } from 'module'
+
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json')
+const CURRENT_VERSION = pkg.version
+const REPO_OWNER = 'ShadeTheWitcher'
+const REPO_NAME = 'minecraft-playtime-tracker-local'
 
 const execAsync = util.promisify(exec)
+
+function compareVersions(v1: string, v2: string): number {
+    const parts1 = v1.split('.').map(Number)
+    const parts2 = v2.split('.').map(Number)
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+        const p1 = parts1[i] || 0
+        const p2 = parts2[i] || 0
+        if (p1 > p2) return 1
+        if (p1 < p2) return -1
+    }
+    return 0
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -623,6 +643,58 @@ ipcMain.handle('settings:set', (_event, newSettings) => {
     }
 })
 
+ipcMain.handle('app:check-updates', async () => {
+    return new Promise((resolve) => {
+        const options = {
+            hostname: 'api.github.com',
+            path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'MinecraftPlaytimeTracker'
+            }
+        }
+
+        https.get(options, (res) => {
+            let data = ''
+            res.on('data', (chunk) => data += chunk)
+            res.on('end', () => {
+                try {
+                    if (res.statusCode === 200) {
+                        const release = JSON.parse(data)
+                        const latestVersion = release.tag_name.replace('v', '')
+
+                        // Proper semver comparison
+                        const isNew = compareVersions(latestVersion, CURRENT_VERSION) > 0
+
+                        resolve({
+                            isNew,
+                            version: latestVersion,
+                            url: release.html_url,
+                            current: CURRENT_VERSION
+                        })
+                    } else if (res.statusCode === 404) {
+                        console.log('[Update] No releases found for this repository.')
+                        resolve({ isNew: false, current: CURRENT_VERSION })
+                    } else {
+                        console.error('[Update] GitHub API returned status:', res.statusCode)
+                        resolve({ error: 'GitHub API error' })
+                    }
+                } catch (e) {
+                    console.error('[Update] Failed to parse GitHub API response:', e)
+                    resolve({ error: 'Parse error' })
+                }
+            })
+        }).on('error', (err) => {
+            console.error('[Update] Network error while checking for updates:', err)
+            resolve({ error: 'Network error' })
+        })
+    })
+})
+
+ipcMain.on('app:open-external', (_event, url: string) => {
+    shell.openExternal(url)
+})
+
 async function checkProcess() {
     try {
         const { stdout } = await execAsync('tasklist /FO CSV /NH')
@@ -1034,7 +1106,8 @@ function sendStateUpdate() {
                 games: gamesList,
                 isOnline: isOnline,
                 availablePresets: Object.values({ ...defaultGames, ...additionalPresets })
-                    .filter(pg => !GAMES[pg.id])
+                    .filter(pg => !GAMES[pg.id]),
+                version: CURRENT_VERSION
             })
         }
     } catch (e) { }

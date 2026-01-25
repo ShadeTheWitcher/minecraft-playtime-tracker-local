@@ -184,7 +184,7 @@ function App() {
         {viewMode === 'add' ? (
           <AddGameView availablePresets={state.availablePresets} language={state.language} />
         ) : viewMode === 'settings' ? (
-          <SettingsView userEmail={user?.email} currentLanguage={state.language} />
+          <SettingsView userEmail={user?.email} currentLanguage={state.language} version={state.version} />
         ) : viewMode === 'edit' && selectedGameMeta ? (
           <EditGameView
             gameId={selectedGameMeta.id}

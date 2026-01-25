@@ -51,6 +51,7 @@ export type TranslationSchema = {
     delete_confirm_msg: (name: string) => string;
     settings_title: string;
     profile_section: string;
+    updates_section: string;
     display_name: string;
     enter_name_placeholder: string;
     login_to_change: string;
@@ -66,6 +67,12 @@ export type TranslationSchema = {
     sync_started: string;
     confirm: string;
     cancel_btn: string;
+    check_updates: string;
+    checking_updates: string;
+    up_to_date: string;
+    new_version_available: (v: string) => string;
+    visit_github: string;
+    update_error: string;
     login_title: string;
     signup_title: string;
     email_label: string;
@@ -126,6 +133,7 @@ export const translations: Record<Language, TranslationSchema> = {
         delete_confirm_msg: (name: string) => `Are you sure you want to delete ${name}? All playtime history will be lost forever.`,
         settings_title: 'Settings',
         profile_section: 'Profile',
+        updates_section: 'Updates',
         display_name: 'Display Name',
         enter_name_placeholder: 'Enter your username',
         login_to_change: 'Login to change',
@@ -141,6 +149,16 @@ export const translations: Record<Language, TranslationSchema> = {
         sync_started: 'Sync started...',
         confirm: 'Confirm',
         cancel_btn: 'Cancel',
+
+        // Updates
+        check_updates: 'Check for Updates',
+        checking_updates: 'Checking for updates...',
+        up_to_date: 'You are on the latest version!',
+        new_version_available: (v: string) => `New version available: ${v}!`,
+        visit_github: 'Download from GitHub',
+        update_error: 'Error checking for updates.',
+
+        // Auth
         login_title: 'Login',
         signup_title: 'Sign Up',
         email_label: 'Email',
@@ -199,6 +217,7 @@ export const translations: Record<Language, TranslationSchema> = {
         delete_confirm_msg: (name: string) => `¿Estás seguro de que quieres eliminar ${name}? Todo el historial se perderá para siempre.`,
         settings_title: 'Ajustes',
         profile_section: 'Perfil',
+        updates_section: 'Actualizaciones',
         display_name: 'Nombre Visible',
         enter_name_placeholder: 'Ingresa tu nombre',
         login_to_change: 'Inicia sesión para cambiar',
@@ -214,6 +233,16 @@ export const translations: Record<Language, TranslationSchema> = {
         sync_started: 'Sincronización iniciada...',
         confirm: 'Confirmar',
         cancel_btn: 'Cancelar',
+
+        // Updates
+        check_updates: 'Buscar Actualizaciones',
+        checking_updates: 'Buscando actualizaciones...',
+        up_to_date: '¡Estás en la última versión!',
+        new_version_available: (v: string) => `¡Nueva versión disponible: ${v}!`,
+        visit_github: 'Descargar en GitHub',
+        update_error: 'Error al buscar actualizaciones.',
+
+        // Auth
         login_title: 'Iniciar Sesión',
         signup_title: 'Registrarse',
         email_label: 'Email',

@@ -2,8 +2,10 @@
 
 interface Window {
     electronAPI: {
-        getSettings: () => Promise<{ displayName?: string; autoSync?: boolean; language?: 'en' | 'es'; runAtStartup?: boolean; minimizeToTray?: boolean }>
-        setSettings: (settings: { displayName?: string; autoSync?: boolean; language?: 'en' | 'es'; runAtStartup?: boolean; minimizeToTray?: boolean }) => Promise<void>
+        getSettings: () => Promise<{ displayName?: string; autoSync?: boolean; language?: string; runAtStartup?: boolean; minimizeToTray?: boolean }>
+        setSettings: (settings: { displayName?: string; autoSync?: boolean; language?: string; runAtStartup?: boolean; minimizeToTray?: boolean }) => Promise<void>
+        checkUpdates: () => Promise<{ isNew: boolean; version: string; url: string; current: string; error?: string }>
+        openExternal: (url: string) => void
     }
     ipcRenderer: {
         on(channel: string, func: (...args: any[]) => void): () => void
