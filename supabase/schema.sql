@@ -26,6 +26,10 @@ create policy "Users can update their own games"
 on public.games for update
 using (auth.uid() = user_id);
 
+create policy "Users can delete their own games"
+on public.games for delete
+using (auth.uid() = user_id);
+
 -- 2. Playtime Entries Table (History)
 create table public.playtime_entries (
   id uuid default gen_random_uuid() primary key,
@@ -45,6 +49,10 @@ using (auth.uid() = user_id);
 create policy "Users can insert their own playtime entries"
 on public.playtime_entries for insert
 with check (auth.uid() = user_id);
+
+create policy "Users can delete their own playtime entries"
+on public.playtime_entries for delete
+using (auth.uid() = user_id);
 
 -- Indexes for performance
 create index idx_games_user_id on public.games(user_id);
