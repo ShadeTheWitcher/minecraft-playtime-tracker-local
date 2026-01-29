@@ -32,7 +32,7 @@ function compareVersions(v1: string, v2: string): number {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Defines
-const POLL_INTERVAL = 1000 // 1 second
+const POLL_INTERVAL = 3000 // 3 seconds
 
 // Disable GPU Acceleration for Windows to prevent black/gray screens
 app.disableHardwareAcceleration()
